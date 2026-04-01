@@ -1,292 +1,113 @@
 # Quittung
 
-Quittung is an AI-native service for automating financial accounting. The system accepts documents (PDF/IMG), extracts structured purchase data from them using Large Language Models (LLM), and provides users with analytics in Excel format and via API.
+**Quittung** is an AI-native financial intelligence service that transforms unstructured documents (PDFs and images) into structured, categorized accounting data. By leveraging Multimodal LLMs and an asynchronous event-driven architecture, it provides users with seamless expense tracking via a Telegram interface and a secure REST API.
+
+---
 
 ## Features
 
-- Technology stack and rationale:
-FastAPI: Main backend. Chosen over Django due to its native support for asynchronous processing, which is critical when waiting for responses from the LLM and Telegram API.
+* **Multimodal AI Extraction**: Powered by **Google Gemini 1.5 Flash** to "see" and interpret receipt layouts natively, eliminating the need for traditional OCR tuning.
+* **Intelligent Categorization**: Automatically groups items (e.g., *"Bio-Milch"* → *"Groceries"*) using LLM semantic understanding.
+* **Production-Grade Auth**: Secure registration, JWT-based authentication, session management via Redis, and **Argon2** password hashing.
+* **Asynchronous Pipeline**: Heavy PDF and image processing is offloaded to **Celery + Redis** workers to ensure the Telegram bot and API remain highly responsive.
+* **Dual-Interface**: Manage expenses via a **Telegram Bot** (Aiogram 3.x) or integrate directly with the **FastAPI REST API**.
+* **High-Performance Execution**: Optimized asynchronous event loop using `uvloop`.
 
-Aiogram 3.x: Bot framework. Enables the implementation of a user-friendly UI (buttons, loading indicators).
-
-Celery + Redis: Task queue. PDF processing is a “heavy” operation. The bot must instantly respond with “Received, processing,” while the actual processing happens in the worker.
-
-PostgreSQL + SQLAlchemy: Storage of receipt metadata, product-category relationships, and user profiles.
-
-Google AI Studio (Gemini API): The system’s brain. Models: Gemini 2.5 Flash, Gemini 1.5 Flash-Lite. Huge context window (up to 1 million tokens) and multimodality (understands video, audio, and PDF).
-
-Pandas: Generation of final reports. 
-- User Registration with email validation
-- Login with JWT token-based authentication
-- Logout functionality with session management
-- Password change capability
-- Async architecture with uvloop
-- Redis session storage
-- PostgreSQL database
+---
 
 ## Tech Stack
 
-- **Framework**: FastAPI
-- **Database**: PostgreSQL with asyncpg
-- **Cache/Sessions**: Redis
-- **Event Loop**: uvloop (high-performance event loop)
-- **Validation**: Pydantic v2
-- **Authentication**: JWT (PyJWT)
-- **Password Hashing**: bcrypt
-- **Testing**: pytest with pytest-asyncio
+| Category | Technology |
+| :--- | :--- |
+| **Core** | FastAPI, Aiogram 3.x, uvloop |
+| **AI Brain** | Google AI Studio (**Gemini 1.5 Flash**) |
+| **Task Management** | Celery & Redis |
+| **Database** | PostgreSQL (asyncpg & SQLAlchemy 2.0) |
+| **Data Analysis** | Pandas & OpenPyXL |
+| **Security** | JWT (PyJWT), Argon2 (pwdlib) |
+| **Validation** | Pydantic v2 |
+
+---
 
 ## Project Structure
 
-```
-auth-api-service/
+```plaintext
+quittung/
 ├── app/
-│   ├── __init__.py
-│   ├── main.py                 # FastAPI application entry point
-│   ├── config.py               # Configuration settings
-│   ├── dependencies.py         # Dependency injection
 │   ├── api/
-│   │   ├── __init__.py
 │   │   └── v1/
-│   │       ├── __init__.py
-│   │       └── endpoints/
-│   │           ├── __init__.py
-│   │           ├── admin.py    # Admin endpoints  
-│   │           ├── auth.py     # Authentication endpoints
-│   │           └── users.py    # Users endpoints
+│   │       └── endpoints/      # Auth, Users, and Receipt processing
+│   ├── bot/
+│   │   ├── handlers/           # Telegram command/document handlers
+│   │   └── middlewares/        # Auth & Logging middlewares
 │   ├── core/
-│   │   ├── __init__.py
-│   │   ├── security.py         # Security utilities (JWT, password hashing)
-│   │   └── exceptions.py       # Custom exceptions
+│   │   ├── config.py           # Settings & Env vars
+│   │   ├── security.py         # JWT & Password logic
+│   │   └── exceptions.py       # Global exception handling
 │   ├── db/
-│   │   ├── __init__.py
-│   │   ├── base.py             # Database base
-│   │   ├── session.py          # Async database session management
-│   │   └── models.py           # SQLAlchemy models
-│   ├── schemas/
-│   │   ├── __init__.py
-│   │   ├── user.py             # Pydantic validation schemas
-│   │   └── auth.py             # Pydantic validation schemas
+│   │   ├── models.py           # SQLAlchemy models
+│   │   └── session.py          # Async session management
+│   ├── schemas/                # Pydantic validation (DTOs)
 │   ├── services/
-│   │   ├── __init__.py
-│   │   ├── auth_service.py     # Business logic layer
-│   │   └── user_service.py     # Business logic layer
-│   └── utils/
-│       ├── __init__.py
-│       └── redis_client.py     # Async Redis client
-├── tests/
-│   ├── __init__.py
-│   ├── conftest.py             # Pytest fixtures
-│   ├── test_admin.py           # admin features tests
-│   ├── test_auth.py            # Authentication tests
-│   ├── test_redis_features.py  # Authentication tests
-│   └── test_user_features.py   # user features tests
-├── Dockerfile
-├── manage.py
-├── docker-compose.yml
-├── requirements.txt
-├── .env
-├── pytest.ini
-├── alembic.ini
+│   │   ├── ai_service.py       # Gemini 1.5 Flash integration
+│   │   ├── excel_service.py    # Pandas report generation
+│   │   └── auth_service.py     # Login/Register logic
+│   ├── tasks/
+│   │   └── worker.py           # Celery background tasks
+│   └── main.py                 # FastAPI & Bot entry point
+├── migrations/                 # Alembic database migrations
+├── tests/                      # Pytest suite
+├── docker-compose.yml          # Container orchestration
 └── README.md
-```
 
-## Password Requirements
+## Security & Password Policy
+To ensure financial data integrity, passwords must meet high-security standards:
 
-Passwords must meet the following criteria:
-- **Length**: 8-24 characters
-- **Must contain**:
-  - At least one digit (0-9)
-  - At least one lowercase letter (a-z)
-  - At least one uppercase letter (A-Z)
-  - At least one special character
-- **Cannot contain**: `@`, `"`, `'`, `<`, `>`
+* **Length:** 8-24 characters.
+* **Must contain:** At least one digit (0-9), one lowercase (a-z), one uppercase (A-Z), and one special character.
+* **Strict Restrictions:** Characters @, ", ', <, > are forbidden to prevent injection/parsing issues.
 
-**Valid password examples**:
-- `MyPass123!`
-- `Secure#Pass456`
-- `StrongP_ssw0rd`
-
-## Installation
+## Installation & Setup
 
 ### Using Docker (Recommended)
-
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd auth-api-service
-```
-
-2. Create `.env`:
-
-3. Update `.env` with your configuration (especially `SECRET_KEY` for production)
-
-4. Start all services:
-```bash
-docker-compose up -d
-```
-
-5. Check logs:
-```bash
-docker-compose logs -f api
-```
-
-The API will be available at `http://localhost:8000`
+1.  **Clone the repository:**
+    ```bash
+    git clone <repository-url>
+    cd quittung
+    ```
+2.  **Configure Environment:** Create a .env file based on the provided requirements:
+    * TELEGRAM_BOT_TOKEN=...
+    * GOOGLE_API_KEY=...
+    * DATABASE_URL=postgresql+asyncpg://user:pass@db:5432/quittung
+    * REDIS_URL=redis://redis:6379/0
+    * SECRET_KEY=...
+3.  **Start Services:**
+    ```bash
+    docker-compose up -d --build
+    ```
 
 ### Local Development
+* Install dependencies: `pip install -r requirements.txt`
+* Run Migrations: `alembic upgrade head`
+* Start Workers: `celery -A app.tasks.worker worker --loglevel=info`
+* Start App: `python manage.py run` (or `uvicorn app.main:app --reload`)
 
-1. Install Python 3.11+
+## API Endpoints Summary
 
-2. Create and activate virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
+### Authentication
+* **POST /api/v1/auth/register:** Create a new account with email validation.
+* **POST /api/v1/auth/login:** Exchange credentials for a JWT and Session ID.
+* **POST /api/v1/auth/logout:** Invalidate the current session in Redis.
 
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-4. Set up PostgreSQL and Redis locally
-
-5. Configure `.env` file with your database and Redis URLs
-
-6. Run the application
-
-## API Documentation
-
-Once the application is running, visit:
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
-
-## API Endpoints
-
-### Authentication Endpoints
-
-#### 1. Register User
-**POST** `/api/v1/auth/register`
-
-Register a new user with email and password.
-
-**Request Body:**
-```json
-{
-  "email": "user@example.com",
-  "password": "SecurePass123!"
-}
-```
-
-**Response (201 Created):**
-```json
-{
-  "id": 1,
-  "email": "user@example.com",
-  "created_at": "2026-02-09T10:30:00"
-}
-```
-
-#### 2. Login
-**POST** `/api/v1/auth/login`
-
-Authenticate user and receive access token.
-
-**Request Body:**
-```json
-{
-  "email": "user@example.com",
-  "password": "SecurePass123!"
-}
-```
-
-**Response (200 OK):**
-```json
-{
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "token_type": "bearer",
-  "session_id": "550e8400-e29b-41d4-a716-446655440000"
-}
-```
-
-#### 3. Logout
-**POST** `/api/v1/auth/logout`
-
-Logout user and invalidate session.
-
-**Headers:**
-```
-Authorization: Bearer <access_token>
-```
-
-**Response (200 OK):**
-```json
-{
-  "message": "Successfully logged out"
-}
-```
-
-#### 4. Change Password
-**PUT** `/api/v1/auth/change-password`
-
-Change the authenticated user's password.
-
-**Headers:**
-```
-Authorization: Bearer <access_token>
-```
-
-**Request Body:**
-```json
-{
-  "old_password": "SecurePass123!",
-  "new_password": "NewSecurePass456#"
-}
-```
-
-**Response (200 OK):**
-```json
-{
-  "message": "Password changed successfully"
-}
-```
-
-### Health Check Endpoints
-
-#### Root
-**GET** `/`
-
-Returns basic API information.
-
-#### Health Check
-**GET** `/health`
-
-Returns service health status.
+### Receipt Processing
+* **POST /api/v1/receipts/upload:** Upload PDF/IMG for async processing.
+* **GET /api/v1/receipts/export:** Download the consolidated Excel report.
+* **GET /api/v1/receipts/history:** Retrieve a list of parsed transactions.
 
 ## Testing
-
-Run the complete test suite:
-
+Run the full suite with coverage:
 ```bash
-pytest tests/ -v
-```
-
-Run with coverage report:
-
-```bash
-pytest tests/ --cov=app --cov-report=html
-```
-
-View coverage report:
-```bash
-open htmlcov/index.html  # macOS
-xdg-open htmlcov/index.html  # Linux
-start htmlcov/index.html  # Windows
-```
-
-Run specific test class:
-```bash
-pytest tests/test_auth.py::TestRegistration -v
-```
+pytest tests/ -v --cov=app
 
 ## License
-
-MIT License - Feel free to use this project for learning or production purposes.
+Distributed under the MIT License. See LICENSE for more information.
