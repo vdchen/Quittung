@@ -11,8 +11,9 @@ class Receipt(Base):
     merchant_name = Column(String, nullable=True)
     total_amount = Column(Float, nullable=False)
     currency = Column(String, default="EUR")
-    date = Column(DateTime, server_default=func.now())
+    date = Column(DateTime(timezone=True), server_default=func.now())
     status = Column(String, default="pending")  # pending, completed, failed
+    image_url = Column(String, nullable=True)
 
     # Relationship to individual items
     items = relationship("LineItem", back_populates="receipt",

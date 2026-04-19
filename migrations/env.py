@@ -23,9 +23,9 @@ def do_run_migrations(connection):
         render_as_batch=True
     )
     with context.begin_transaction():
-        print("🚀 Executing migration transaction...")
+        print("Executing migration transaction...")
         context.run_migrations()
-        print("✅ Migration committed!")
+        print("Migration committed!")
 
 async def run_async_migrations():
     # Force the internal Docker address, but keep the asyncpg driver

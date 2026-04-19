@@ -1,12 +1,23 @@
 from fastapi import FastAPI
 import uvicorn
+from app.api.endpoints import receipts, exports
+from fastapi.responses import FileResponse
+from app.services.export_service import generate_expenses_report
+
 
 app = FastAPI(title="Quittung API")
 
+# Mount routers
+app.include_router(receipts.router, prefix="/receipts", tags=["Receipts"])
+app.include_router(exports.router, prefix="/receipts", tags=["Exports"])
 
-@app.get("/health")
+@app.get("/health", tags=["System"])
 async def health_check():
     return {"status": "online", "message": "Quittung API is running"}
+
+@app.get("/", tags=["System"])
+async def root():
+    return {"status": "Quittung API is online"}
 
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

@@ -32,6 +32,7 @@ openpyxl==3.1.5
 # Tasks and Async
 redis[hiredis]==7.1.1
 celery
+watchdog
 
 #Cache
 aiocache==0.12.3

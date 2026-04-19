@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   db:
     image: postgres:16-alpine
@@ -31,18 +29,35 @@ services:
       timeout: 3s
       retries: 5
 
+  worker:
+      build: .
+      container_name: quittung_worker
+      command: watchmedo auto-restart --directory=./app --pattern=*.py --recursive -- celery -A app.core.celery_app worker --loglevel=info
+      volumes:
+        - .:/app
+        - ./uploads:/app/uploads
+      environment:
+        - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/quittung_db
+        - REDIS_URL=redis://redis:6379/0
+        - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+        - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      depends_on:
+        - redis
+        - db
+
   api:
     build: .
     container_name: quittung_api
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     volumes:
       - .:/app
+      - ./uploads:/app/uploads
     ports:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/quittung_db
       - REDIS_URL=redis://redis:6379/0
-      - SECRET_KEY=dev-secret-key-change-in-production
+      - SECRET_KEY=${SECRET_KEY}
     depends_on:
       db:
         condition: service_healthy
@@ -50,6 +65,19 @@ services:
         condition: service_healthy
     stdin_open: true
     tty: true
+
+
+  quittung_bot:
+      build:
+        context: .
+        dockerfile: Dockerfile.bot
+      environment:
+        - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+        - API_URL=http://api:8000/receipts
+      depends_on:
+        - api
+      restart: always
+
 
 volumes:
   postgres_data:
