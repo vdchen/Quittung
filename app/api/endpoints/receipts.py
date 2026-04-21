@@ -1,14 +1,8 @@
 import os
 import uuid
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
-from fastapi.responses import FileResponse
-from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional
-from app.db.session import get_db
-from app.services.ai_service import process_receipt_image
-from app.services.receipt_service import save_extracted_receipt
-from app.worker import process_receipt_task
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from celery.result import AsyncResult
+from app.worker import process_receipt_task
 from app.core.celery_app import celery_app
 
 
@@ -19,7 +13,9 @@ UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @router.post("/upload", status_code=202)
-async def upload_receipt(file: UploadFile = File(...)):
+async def upload_receipt(file: UploadFile = File(...),
+                         chat_id: int | None = Form(None) # Accept chat_id from the bot
+                         ):
     # 1. Validation
     if file.content_type not in ["application/pdf", "image/jpeg", "image/png"]:
         raise HTTPException(status_code=400, detail="Invalid file type")
@@ -37,7 +33,7 @@ async def upload_receipt(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
 
     # 4. Trigger Celery Task - Pass the PATH, not the bytes
-    task = process_receipt_task.delay(file_path, file.content_type)
+    task = process_receipt_task.delay(file_path, file.content_type, chat_id)
 
     return {
         "task_id": task.id,

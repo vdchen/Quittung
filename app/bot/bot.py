@@ -40,7 +40,8 @@ async def handle_photo(message: types.Message):
             
             # Forward to our FastAPI
             files = {'file': ('receipt.jpg', telegram_resp.content, 'image/jpeg')}
-            api_resp = await client.post(f"{API_URL}/upload", files=files)
+            data = {'chat_id': str(message.chat.id)}
+            api_resp = await client.post(f"{API_URL}/upload", files=files, data=data)
             
             if api_resp.status_code == 202:
                 await message.answer("✅ Receipt received! I'm processing it now.")
