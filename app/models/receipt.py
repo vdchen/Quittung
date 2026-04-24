@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, func
+from sqlalchemy import BigInteger, Column, Integer, String, Float, DateTime, ForeignKey, func
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from app.db.base import Base
@@ -8,6 +8,7 @@ class Receipt(Base):
     __tablename__ = "receipts"
 
     id = Column(Integer, primary_key=True, index=True)
+    telegram_id = Column(BigInteger, index=True)
     merchant_name = Column(String, nullable=True)
     total_amount = Column(Float, nullable=False)
     currency = Column(String, default="EUR")
