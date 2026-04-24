@@ -4,19 +4,30 @@ from google.genai import types
 from app.schemas.receipt import ReceiptExtractionSchema
 from dotenv import load_dotenv
 
-load_dotenv()  # Ensure .env is loaded
+load_dotenv() 
 
-# The new SDK uses a Client class
+# The SDK uses a Client class
 client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
 
 async def process_receipt_image(file_bytes: bytes, mime_type: str = "image/jpeg") -> ReceiptExtractionSchema:
-    prompt = "Analyze this receipt. Extract the merchant name, date, total amount, currency, and categorized items. " \
-    "If the category is Groceries, split it into subcategory like Meat, Vegtables, Fruits, Drinks, Snaks, etc. " \
-    "If it is pfand, categorize it as a deposit."
+    prompt = "Task: Act as a specialized OCR and Data Extraction engine. " \
+    "Analyze the provided receipt and return a structured JSON object. " \
+    "Extraction Rules: " \
+    "Merchant: Extract the full legal name of the store. " \
+    "Date: Return in YYYY-MM-DD format. " \
+    "Total: Extract the final amount paid as a float. " \
+    "Currency: Extract the ISO currency code (e.g., EUR, USD, UAH). " \
+    "Categorized Items: For each line item, extract the name, price, " \
+    "and a single category from the following allowed list: " \
+    "[Bakery, Pantry, Meat, Vegetables, Fruits, Drinks, Snacks, Dairy, Household, Deposit, Other]." \
+    "Specific Logic:" \
+    "If an item is 'Pfand' or a bottle return, it must be categorized as Deposit." \
+    "Do not use hierarchical names like 'Groceries (Fruits)'; use only the specific category name (e.g., Fruits)." \
+    "If you are unsure of a category, use Other." \
+    "Output Format: Strict JSON only."
 
-    # The SDK wants a list of Parts or Strings.
-    # For bytes, use this specific dictionary structure:
+
     response = client.models.generate_content(
         model="gemini-2.5-flash",
         contents=[

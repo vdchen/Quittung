@@ -2,138 +2,129 @@ import asyncio
 import httpx
 import os
 import logging
+from typing import Any
+from sqlalchemy import select
 from app.core.celery_app import celery_app
 from app.services.ai_service import process_receipt_image
 from app.services.receipt_service import save_extracted_receipt
 from app.db.session import async_session_maker
 
 logger = logging.getLogger(__name__)
-
-@celery_app.task(name="app.worker.process_receipt_task")
-def process_receipt_task(file_path: str, mime_type: str):
-    async def run_process():
-        try:
-            with open(file_path, "rb") as f:
-                file_bytes = f.read()
-
-            # Using a context manager that ensures a fresh session on this loop
-            async with async_session_maker() as db:
-                extraction = await process_receipt_image(file_bytes, mime_type=mime_type)
-                
-                receipt_obj = await save_extracted_receipt(db, extraction, image_url=file_path)
-                
-                # Critical: Access attributes before the session closes
-                receipt_id = receipt_obj.id
-                merchant = extraction.merchant_name
-                total = extraction.total_amount
-                
-                await db.commit()
-                
-            logger.info(f"Task Complete: Processed {file_path}")
-            
-            return {
-                "receipt_id": receipt_id,
-                "merchant": merchant,
-                "total": total
-            }
-
-        except Exception as e:
-            logger.error(f"Task Failed for {file_path}: {str(e)}")
-            raise e
-
-    return asyncio.run(run_process())
-
-
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
+async def send_telegram_message(chat_id: int, text: str):
+    """Helper to send Telegram messages asynchronously."""
+    if not TELEGRAM_BOT_TOKEN or not chat_id:
+        return
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    async with httpx.AsyncClient() as client:
+        try:
+            await client.post(url, json={
+                "chat_id": chat_id, 
+                "text": text, 
+                "parse_mode": "HTML"
+            })
+        except Exception as e:
+            logger.error(f"Failed to send Telegram notification: {e}")
 
 @celery_app.task(name="app.worker.process_receipt_task")
 def process_receipt_task(file_path: str, mime_type: str, chat_id: int | None = None):
     async def run_process():
         try:
+            # 1. Load File
             with open(file_path, "rb") as f:
                 file_bytes = f.read()
 
             async with async_session_maker() as db:
+                # 2. AI Extraction
                 extraction = await process_receipt_image(file_bytes, mime_type=mime_type)
-                receipt_obj = await save_extracted_receipt(db, extraction, image_url=file_path)
                 
-                # Capture values before session closes
+                # 3. Save to DB (Passing telegram_id for multi-tenancy)
+                receipt_obj = await save_extracted_receipt(
+                    db=db, 
+                    extraction=extraction, 
+                    telegram_id=chat_id, 
+                    image_url=file_path
+                )
+                
+                # 4. Handle Duplicates
+                if receipt_obj is None:
+                    await send_telegram_message(
+                        chat_id, 
+                        "⚠️ <b>Duplicate Detected:</b> This receipt has already been processed."
+                    )
+                    return {"status": "duplicate"}
+
+                # 5. Capture values before session closes
                 receipt_id = receipt_obj.id
                 merchant = extraction.merchant_name or "Unknown"
-                date = extraction.date or "N/A"
+                date_str = extraction.date.strftime("%Y-%m-%d") if extraction.date else "N/A"
                 total = extraction.total_amount or 0.00
                 currency = extraction.currency or "€"
 
-                # Format Line Items
+                # 6. Format Line Items 
                 items_text = ""
                 if extraction.items:
                     items_text = "<b>📦 Items:</b>\n"
                     for item in extraction.items:
-                        # Safety check: if item is Pydantic, use getattr. 
-                        # If it's a dict, use .get()
                         if isinstance(item, dict):
                             name = item.get("name", "Unknown Item")
                             price = item.get("price", 0.00)
                             category = item.get("category", "Uncategorized")
                         else:
-                            # This is what you need for your Pydantic objects:
                             name = getattr(item, "name", "Unknown Item")
                             price = getattr(item, "price", 0.00)
                             category = getattr(item, "category", "Uncategorized")
-                            
-                        items_text += f" • {name} | {price} {currency} (<i>{category}</i>)\n"
                         
+                        items_text += f" • {name} | {price} {currency} (<i>{category}</i>)\n"
+                
                 await db.commit()
 
-            # --- Telegram Notification ---
-            if TELEGRAM_BOT_TOKEN and chat_id:
+            # 7. Success Notification
+            if chat_id:
                 text = (
                     f"✅ <b>Receipt Processed</b>\n"
                     f"━━━━━━━━━━━━━━━\n"
-                    f"🆔 <b>ID:</b> <code>{receipt_id}</code>\n"
-                    f"📅 <b>Date:</b> {date}\n"
+                    f"📅 <b>Date:</b> {date_str}\n"
                     f"🏪 <b>Merchant:</b> {merchant}\n"
                     f"━━━━━━━━━━━━━━━\n"
                     f"{items_text}"
                     f"━━━━━━━━━━━━━━━\n"
                     f"💰 <b>Total Amount:</b> {total} {currency}\n"
                 )
+                await send_telegram_message(chat_id, text)
 
-                url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-                async with httpx.AsyncClient() as client:
-                    await client.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"})
-
-            return {"receipt_id": receipt_id, "merchant": merchant, "total": total}
+            return {"status": "success", "receipt_id": receipt_id}
 
         except Exception as e:
             logger.error(f"Task Failed: {str(e)}")
-            if TELEGRAM_BOT_TOKEN and chat_id:
-                url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-                async with httpx.AsyncClient() as client:
-                    await client.post(url, json={"chat_id": chat_id, "text": "❌ <b>Error:</b> Could not process the receipt."})
+            if chat_id:
+                await send_telegram_message(chat_id, "❌ <b>Error:</b> Processing failed.")
             raise e
 
     return asyncio.run(run_process())
 
-
 @celery_app.task(name="app.worker.generate_export_task")
 def generate_export_task(file_name: str, chat_id: int | None = None):
     async def run_export_and_notify():
+        # Lazy import to prevent circular dependency
+        from app.services.export_service import generate_expenses_report
+        
         async with async_session_maker() as db:
-            from app.services.export_service import generate_expenses_report
+            # Generate the report filtered by telegram_id
+            output_path = await generate_expenses_report(db, telegram_id=chat_id, file_name=file_name)
             
-            # 1. Generate the file
-            output_path = await generate_expenses_report(db, file_name)
-            
-            # 2. Notify Telegram ONLY if a chat_id was provided
             if output_path and TELEGRAM_BOT_TOKEN and chat_id:
                 url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
                 async with httpx.AsyncClient() as client:
                     with open(output_path, "rb") as f:
                         await client.post(
                             url,
-                            data={"chat_id": chat_id, "caption": "Here is your export! 📊"},
+                            data={
+                                "chat_id": chat_id, 
+                                "caption": "Here is your spending report! 📊",
+                                "parse_mode": "HTML"
+                            },
                             files={"document": f}
                         )
             
