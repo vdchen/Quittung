@@ -101,8 +101,17 @@ def process_receipt_task(file_path: str, mime_type: str, chat_id: int | None = N
             if chat_id:
                 await send_telegram_message(chat_id, "❌ <b>Error:</b> Processing failed.")
             raise e
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
 
-    return asyncio.run(run_process())
+    if loop and loop.is_running():
+        # Test Environment: loop exists, schedule task
+        return loop.create_task(run_process()) 
+    else:
+        # Production Environment: no loop exists, create one
+        return asyncio.run(run_process())
 
 @celery_app.task(name="app.worker.generate_export_task")
 def generate_export_task(file_name: str, chat_id: int | None = None):
@@ -130,4 +139,12 @@ def generate_export_task(file_name: str, chat_id: int | None = None):
             
             return {"status": "completed", "file_path": output_path}
 
-    return asyncio.run(run_export_and_notify())
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        return loop.create_task(run_export_and_notify()) 
+    else:
+        return asyncio.run(run_export_and_notify())

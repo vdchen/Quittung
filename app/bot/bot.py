@@ -39,7 +39,7 @@ async def forward_file_to_api(
             files = {'file': (file_name, telegram_resp.content, mime_type)}
             data = {'chat_id': str(message.chat.id)}
         
-            api_resp = await http_client.post(f"{API_URL}/upload", files=files, data=data)
+            api_resp = await http_client.post(f"{API_URL}/receipts/upload", files=files, data=data)
         
             if api_resp.status_code == 202:
                 await message.answer(success_msg)
@@ -93,7 +93,7 @@ async def handle_document(message: types.Message, http_client: httpx.AsyncClient
 @dp.message(Command("export"))
 async def cmd_export(message: types.Message, http_client: httpx.AsyncClient):
     try:
-        resp = await http_client.post(f"{API_URL}/export", params={"chat_id": message.chat.id})
+        resp = await http_client.post(f"{API_URL}/exports/export", params={"chat_id": message.chat.id})
         if resp.status_code == 202:
             await message.answer("📊 Generating your Excel report... Stay tuned!")
         else:

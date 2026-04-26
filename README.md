@@ -6,7 +6,7 @@
 
 ## Features
 
-* **Multimodal AI Extraction**: Powered by **Google Gemini 1.5 Flash** to "see" and interpret receipt layouts natively, eliminating the need for traditional OCR tuning.
+* **Multimodal AI Extraction**: Powered by **Google Gemini 2.5 Flash** to "see" and interpret receipt layouts natively, eliminating the need for traditional OCR tuning.
 * **Intelligent Categorization**: Automatically groups items (e.g., *"Bio-Milch"* → *"Groceries"*) using LLM semantic understanding.
 * **Production-Grade Auth**: Secure registration, JWT-based authentication, session management via Redis, and **Argon2** password hashing.
 * **Asynchronous Pipeline**: Heavy PDF and image processing is offloaded to **Celery + Redis** workers to ensure the Telegram bot and API remain highly responsive.
@@ -20,7 +20,7 @@
 | Category | Technology |
 | :--- | :--- |
 | **Core** | FastAPI, Aiogram 3.x, uvloop |
-| **AI Brain** | Google AI Studio (**Gemini 1.5 Flash**) |
+| **AI Brain** | Google AI Studio (**Gemini 2.5 Flash**) |
 | **Task Management** | Celery & Redis |
 | **Database** | PostgreSQL (asyncpg & SQLAlchemy 2.0) |
 | **Data Analysis** | Pandas & OpenPyXL |

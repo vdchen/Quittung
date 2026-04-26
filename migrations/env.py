@@ -28,9 +28,8 @@ def do_run_migrations(connection):
         print("Migration committed!")
 
 async def run_async_migrations():
-    # Force the internal Docker address, but keep the asyncpg driver
-    docker_url = "postgresql+asyncpg://postgres:postgres@db:5432/quittung_db"
-    connectable = create_async_engine(docker_url, poolclass=pool.NullPool)
+
+    connectable = create_async_engine(DATABASE_URL, poolclass=pool.NullPool)
 
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)

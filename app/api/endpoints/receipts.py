@@ -57,7 +57,3 @@ async def get_task_status(task_id: str):
         response["error"] = str(task_result.info)
         
     return response
-
-
-
-

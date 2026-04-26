@@ -7,7 +7,7 @@ from app.services.ai_service import process_receipt_image
 @pytest.mark.asyncio
 async def test_extraction():
     # Path to test receipt
-    image_path = r"D:/Programs/Quittung/REWE-ebon.pdf"
+    image_path = "/app/tests/sample_receipt.pdf"
 
     with open(image_path, "rb") as f:
         image_bytes = f.read()

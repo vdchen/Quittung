@@ -1,7 +1,7 @@
 import os
 import uuid
 from typing import Optional
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import FileResponse
 from celery.result import AsyncResult
 from app.core.celery_app import celery_app
@@ -31,13 +31,17 @@ async def trigger_export(chat_id: Optional[int] = None):
 async def get_export_status(task_id: str):
     task_result = AsyncResult(task_id, app=celery_app)
     
+    # Logic to catch non-existent tasks (PENDING with no metadata)
+    if task_result.state == 'PENDING' and task_result.info is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail="Task not found or expired"
+        )
+    
     if task_result.state == 'SUCCESS':
         result_data = task_result.result
-        # Check if result_data exists and contains the path
         if result_data and "file_path" in result_data:
             file_path = result_data.get("file_path")
-            
-            # Final safety check: Does the file actually exist on disk?
             if os.path.exists(file_path):
                 return FileResponse(
                     path=file_path, 
