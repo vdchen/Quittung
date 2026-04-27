@@ -2,30 +2,53 @@ import asyncio
 import httpx
 import os
 import logging
-from typing import Any
-from sqlalchemy import select
+from app.config import settings
 from app.core.celery_app import celery_app
 from app.services.ai_service import process_receipt_image
 from app.services.receipt_service import save_extracted_receipt
 from app.db.session import async_session_maker
 
 logger = logging.getLogger(__name__)
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+
+async def _send_telegram_request(method: str, payload: dict, files: dict | None = None):
+    """
+    Internal generic helper to handle all Telegram API communication.
+    """
+    if not settings.TELEGRAM_BOT_TOKEN:
+        logger.warning("TELEGRAM_BOT_TOKEN not set. Skipping notification.")
+        return
+
+    url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/{method}"
+    
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            # Telegram uses 'json' for simple messages, 
+            # but 'data' for multipart (files)
+            if files:
+                response = await client.post(url, data=payload, files=files)
+            else:
+                response = await client.post(url, json=payload)
+            
+            response.raise_for_status()
+        except Exception as e:
+            logger.error(f"Telegram API Error ({method}): {e}")
 
 async def send_telegram_message(chat_id: int, text: str):
-    """Helper to send Telegram messages asynchronously."""
-    if not TELEGRAM_BOT_TOKEN or not chat_id:
-        return
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    async with httpx.AsyncClient() as client:
-        try:
-            await client.post(url, json={
-                "chat_id": chat_id, 
-                "text": text, 
-                "parse_mode": "HTML"
-            })
-        except Exception as e:
-            logger.error(f"Failed to send Telegram notification: {e}")
+    """Public helper for text messages."""
+    if not chat_id: return
+    await _send_telegram_request("sendMessage", {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "HTML"
+    })
+
+async def send_telegram_document(chat_id: int, file_path: str, caption: str = ""):
+    """Public helper for documents."""
+    if not chat_id or not os.path.exists(file_path): return
+    
+    payload = {"chat_id": chat_id, "caption": caption, "parse_mode": "HTML"}
+    with open(file_path, "rb") as f:
+        await _send_telegram_request("sendDocument", payload, files={"document": f})     
 
 @celery_app.task(name="app.worker.process_receipt_task")
 def process_receipt_task(file_path: str, mime_type: str, chat_id: int | None = None):
@@ -123,19 +146,12 @@ def generate_export_task(file_name: str, chat_id: int | None = None):
             # Generate the report filtered by telegram_id
             output_path = await generate_expenses_report(db, telegram_id=chat_id, file_name=file_name)
             
-            if output_path and TELEGRAM_BOT_TOKEN and chat_id:
-                url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
-                async with httpx.AsyncClient() as client:
-                    with open(output_path, "rb") as f:
-                        await client.post(
-                            url,
-                            data={
-                                "chat_id": chat_id, 
-                                "caption": "Here is your spending report! 📊",
-                                "parse_mode": "HTML"
-                            },
-                            files={"document": f}
-                        )
+            if output_path and chat_id:
+                await send_telegram_document(
+                    chat_id=chat_id, 
+                    file_path=output_path, 
+                    caption="Here is your spending report! 📊"
+                )
             
             return {"status": "completed", "file_path": output_path}
 

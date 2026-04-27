@@ -1,9 +1,10 @@
 import pytest
 from datetime import datetime
 from unittest.mock import AsyncMock, patch, MagicMock, mock_open
-from app.worker import process_receipt_task, generate_export_task
+import httpx
+from app.worker import process_receipt_task, generate_export_task, send_telegram_message
 from app.schemas.receipt import ReceiptExtractionSchema, LineItemSchema
-from app.models.receipt import Receipt
+from app.models.receipt import Receipt    
 
 @pytest.fixture
 def mock_extraction_result():
@@ -86,38 +87,26 @@ async def test_process_receipt_task_duplicate(db_session, mock_extraction_result
 
 @pytest.mark.asyncio
 async def test_generate_export_task_success(db_session):
-    """
-    Tests the export worker: DB Query -> File Generation -> Telegram Document Upload.
-    """
     chat_id = 285745690
     file_name = "test_report.xlsx"
     dummy_path = "uploads/test_report.xlsx"
 
-    # Patching dependencies
+    # Patch 'settings' inside app.worker
     with patch("app.worker.async_session_maker") as mock_session_factory, \
+         patch("app.worker.settings") as mock_settings, \
          patch("app.services.export_service.generate_expenses_report") as mock_gen, \
-         patch("httpx.AsyncClient") as mock_client_class, \
-         patch("builtins.open", mock_open(read_data=b"fake_excel_bytes")):
-        
-        # Setup Mocks
-        mock_client_instance = mock_client_class.return_value
-        mock_client_instance.__aenter__.return_value.post = AsyncMock(
-            return_value=MagicMock(status_code=200)
-        )
+         patch("app.worker.send_telegram_document", new_callable=AsyncMock) as mock_tg_doc:
+
+        # Configure the mock settings
+        mock_settings.TELEGRAM_BOT_TOKEN = "fake-token"
         
         mock_session_factory.return_value.__aenter__.return_value = db_session
         mock_gen.return_value = dummy_path
-        
-        # Execute Task (awaiting the returned task/coroutine)
+
         result = await generate_export_task(file_name, chat_id)
 
-        # Assertions
         assert result["status"] == "completed"
-        # Access the post mock through the instance
-        posted_mock = mock_client_instance.__aenter__.return_value.post
-        assert posted_mock.called
-        args, _ = posted_mock.call_args
-        assert "sendDocument" in str(args[0])     
+        mock_tg_doc.assert_called_once()
 
 @pytest.mark.asyncio
 async def test_process_receipt_task_failure_notifies_telegram(db_session):
@@ -133,15 +122,20 @@ async def test_process_receipt_task_failure_notifies_telegram(db_session):
 
 @pytest.mark.asyncio
 async def test_send_telegram_message_network_error():
-    """Covers lines 17-28: httpx Exception handling in worker."""
-    from app.worker import send_telegram_message
-    import httpx
-    
-    # Mock the post to raise an exception
-    with patch("httpx.AsyncClient.post", side_effect=httpx.RequestError("Connection Refused")):
-        with patch("app.worker.logger.error") as mock_log:
-            await send_telegram_message(12345, "Test message")
+    """Verify that network errors during Telegram sends are logged."""
+    # Patch the settings object
+    with patch("app.worker.settings") as mock_settings:
+        mock_settings.TELEGRAM_BOT_TOKEN = "fake-token"
+        
+        with patch("app.worker.httpx.AsyncClient") as mock_client_class:
+            mock_instance = mock_client_class.return_value.__aenter__.return_value
+            mock_instance.post = AsyncMock(side_effect=httpx.RequestError("Connection Refused"))
             
-            # Verify the error was logged
-            mock_log.assert_called()
-            assert "Failed to send Telegram notification" in mock_log.call_args[0][0]        
+            with patch("app.worker.logger") as mock_log:
+                await send_telegram_message(12345, "Test message")
+
+                mock_log.error.assert_called()
+                args, _ = mock_log.error.call_args
+                # Updated to match the new unified error string
+                assert "Telegram API Error" in args[0]
+                assert "Connection Refused" in args[0]

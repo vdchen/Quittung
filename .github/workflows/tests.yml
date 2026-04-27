@@ -46,7 +46,7 @@ jobs:
             -e GOOGLE_API_KEY=$GOOGLE_API_KEY \
             -e DATABASE_URL=$DATABASE_URL \
             -e REDIS_URL=$REDIS_URL \
-            --rm api pytest --cov=app --cov-report=xml
+            --rm api pytest --cov=app --cov-report=xml --cov-report=term-missing
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
