@@ -7,10 +7,17 @@ from dotenv import load_dotenv
 load_dotenv() 
 
 # The SDK uses a Client class
-client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+def get_genai_client():
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        raise ValueError("GOOGLE_API_KEY is not set")
+    return genai.Client(api_key=api_key)
 
 
 async def process_receipt_image(file_bytes: bytes, mime_type: str = "image/jpeg") -> ReceiptExtractionSchema:
+    
+    client = get_genai_client()
+
     prompt = "Task: Act as a specialized OCR and Data Extraction engine. " \
     "Analyze the provided receipt and return a structured JSON object. " \
     "Extraction Rules: " \

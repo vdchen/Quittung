@@ -1,0 +1,42 @@
+name: Python Tests and Coverage
+
+on:
+  push:
+    branches: [ dev, main ]
+  pull_request:
+    branches: [ dev, main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create .env.test file
+        run: |
+          # Use default values for Docker Compose interpolation to stop the warnings
+          echo "PROJECT_NAME=quittung" >> .env.test
+          echo "POSTGRES_USER=postgres" >> .env.test
+          echo "POSTGRES_PASSWORD=postgres" >> .env.test
+          echo "POSTGRES_DB=quittung_test_db" >> .env.test
+          echo "DB_PORT=5432" >> .env.test
+          echo "REDIS_PORT=6379" >> .env.test
+          
+          # Inject actual secrets from GitHub
+          echo "DATABASE_URL=${{ secrets.TEST_DATABASE_URL }}" >> .env.test
+          echo "REDIS_URL=${{ secrets.TEST_REDIS_URL }}" >> .env.test
+          echo "GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}" >> .env.test
+          echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" >> .env.test
+
+      - name: Run tests in Docker
+        run: |
+          # The -p flag forces a valid project name
+          docker compose -p quittung --env-file .env.test run --rm api pytest --cov=app --cov-report=xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false # Don't break the build if coverage upload fails
