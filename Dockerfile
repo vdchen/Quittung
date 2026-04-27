@@ -23,6 +23,11 @@ COPY requirements.txt .
 RUN pip install --upgrade pip && \
     pip install -r requirements.txt
 
+# Copy the entrypoint script
+COPY entrypoint.sh /entrypoint.sh
+# Make it executable
+RUN chmod +x /entrypoint.sh    
+
 # Copy application code
 COPY . .
 
@@ -69,6 +74,9 @@ ENV IPYTHONDIR=/root/.ipython
 
 # Expose port
 EXPOSE 8000
+
+# Set the entrypoint
+ENTRYPOINT ["/entrypoint.sh"]
 
 # Run application
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
