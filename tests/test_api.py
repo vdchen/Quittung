@@ -50,7 +50,7 @@ async def test_get_export_status_failure(client):
         mock_res.return_value.info = "Database connection error"
         
         response = await client.get("/api/v1/exports/export/status/fail-id")
-        assert response.status_code == 200 # Your code currently returns 200 for FAILURE status
+        assert response.status_code == 200
         assert response.json()["status"] == "FAILED"
 
 @pytest.mark.asyncio

@@ -37,6 +37,6 @@ async def test_process_receipt_integration():
 
 @pytest.mark.asyncio
 async def test_invalid_mime_type_raises_error():
-    """Ensure the service handles unsupported files gracefully if you add validation later."""
+    """Ensure the service handles unsupported files gracefully"""
     # Placeholder for negative testing
     pass

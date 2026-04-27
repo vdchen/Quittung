@@ -31,12 +31,21 @@ jobs:
           echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" >> .env.test
 
       - name: Run tests in Docker
+        env:
+          PROJECT_NAME: quittung
+          DATABASE_URL: "postgresql+asyncpg://postgres:postgres@db:5432/quittung_test_db"
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          API_V1_PREFIX: "/api/v1"
         run: |
-          # The -p flag forces a valid project name
-          docker compose -p quittung --env-file .env.test run --rm api pytest --cov=app --cov-report=xml
+          docker compose -p quittung run \
+            -e PROJECT_NAME=$PROJECT_NAME \
+            -e DATABASE_URL=$DATABASE_URL \
+            -e GOOGLE_API_KEY=$GOOGLE_API_KEY \
+            -e API_V1_PREFIX=$API_V1_PREFIX \
+            --rm api pytest --cov=app --cov-report=xml
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
         with:
           file: ./coverage.xml
-          fail_ci_if_error: false # Don't break the build if coverage upload fails
+          fail_ci_if_error: false
