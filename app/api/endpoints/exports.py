@@ -18,7 +18,7 @@ async def trigger_export(chat_id: Optional[int] = None):
     file_name = f"report_{uuid.uuid4().hex[:8]}.xlsx"
     
     # Using string name for the task is the 'clinical' way to avoid circular imports
-    task = celery_app.send_task("app.worker.generate_export_task", args=[file_name, chat_id])
+    task = celery_app.send_task("app.tasks.worker.generate_export_task", args=[file_name, chat_id])
     
     return {
         "task_id": task.id,

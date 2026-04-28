@@ -50,7 +50,7 @@ async def send_telegram_document(chat_id: int, file_path: str, caption: str = ""
     with open(file_path, "rb") as f:
         await _send_telegram_request("sendDocument", payload, files={"document": f})     
 
-@celery_app.task(name="app.worker.process_receipt_task")
+@celery_app.task(name="app.tasks.worker.process_receipt_task")
 def process_receipt_task(file_path: str, mime_type: str, chat_id: int | None = None):
     async def run_process():
         try:
@@ -136,7 +136,7 @@ def process_receipt_task(file_path: str, mime_type: str, chat_id: int | None = N
         # Production Environment: no loop exists, create one
         return asyncio.run(run_process())
 
-@celery_app.task(name="app.worker.generate_export_task")
+@celery_app.task(name="app.tasks.worker.generate_export_task")
 def generate_export_task(file_name: str, chat_id: int | None = None):
     async def run_export_and_notify():
         # Lazy import to prevent circular dependency

@@ -9,4 +9,4 @@ alembic upgrade head
 
 echo "Starting the application..."
 # Execute the CMD passed from the Dockerfile
-exec "$@"
+exec "$@"got 

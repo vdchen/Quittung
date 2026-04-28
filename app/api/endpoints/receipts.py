@@ -2,7 +2,7 @@ import os
 import uuid
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from celery.result import AsyncResult
-from app.worker import process_receipt_task
+from app.tasks.worker import process_receipt_task
 from app.core.celery_app import celery_app
 
 

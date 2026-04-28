@@ -2,7 +2,7 @@ import pytest
 from datetime import datetime
 from unittest.mock import AsyncMock, patch, MagicMock, mock_open
 import httpx
-from app.worker import process_receipt_task, generate_export_task, send_telegram_message
+from app.tasks.worker import process_receipt_task, generate_export_task, send_telegram_message
 from app.schemas.receipt import ReceiptExtractionSchema, LineItemSchema
 from app.models.receipt import Receipt    
 
@@ -28,9 +28,9 @@ async def test_process_receipt_task_success(db_session, mock_extraction_result):
     # We must patch multiple things to isolate the worker
     with patch("builtins.open", mock_open(read_data=b"fake_bytes")), \
          patch("os.path.exists", return_value=True), \
-         patch("app.worker.process_receipt_image") as mock_ai, \
-         patch("app.worker.send_telegram_message") as mock_tg, \
-         patch("app.worker.async_session_maker") as mock_session_factory:
+         patch("app.tasks.worker.process_receipt_image") as mock_ai, \
+         patch("app.tasks.worker.send_telegram_message") as mock_tg, \
+         patch("app.tasks.worker.async_session_maker") as mock_session_factory:
         
         # 1. Setup Mocks
         mock_ai.return_value = mock_extraction_result
@@ -65,9 +65,9 @@ async def test_process_receipt_task_duplicate(db_session, mock_extraction_result
 
     with patch("builtins.open", mock_open(read_data=b"fake_bytes")), \
          patch("os.path.exists", return_value=True), \
-         patch("app.worker.process_receipt_image") as mock_ai, \
-         patch("app.worker.send_telegram_message") as mock_tg, \
-         patch("app.worker.async_session_maker") as mock_session_factory:
+         patch("app.tasks.worker.process_receipt_image") as mock_ai, \
+         patch("app.tasks.worker.send_telegram_message") as mock_tg, \
+         patch("app.tasks.worker.async_session_maker") as mock_session_factory:
 
         mock_ai.return_value = mock_extraction_result
         mock_session_factory.return_value.__aenter__.return_value = db_session
@@ -91,11 +91,11 @@ async def test_generate_export_task_success(db_session):
     file_name = "test_report.xlsx"
     dummy_path = "uploads/test_report.xlsx"
 
-    # Patch 'settings' inside app.worker
-    with patch("app.worker.async_session_maker") as mock_session_factory, \
-         patch("app.worker.settings") as mock_settings, \
+    # Patch 'settings' inside app.tasks.worker
+    with patch("app.tasks.worker.async_session_maker") as mock_session_factory, \
+         patch("app.tasks.worker.settings") as mock_settings, \
          patch("app.services.export_service.generate_expenses_report") as mock_gen, \
-         patch("app.worker.send_telegram_document", new_callable=AsyncMock) as mock_tg_doc:
+         patch("app.tasks.worker.send_telegram_document", new_callable=AsyncMock) as mock_tg_doc:
 
         # Configure the mock settings
         mock_settings.TELEGRAM_BOT_TOKEN = "fake-token"
@@ -110,8 +110,8 @@ async def test_generate_export_task_success(db_session):
 
 @pytest.mark.asyncio
 async def test_process_receipt_task_failure_notifies_telegram(db_session):
-    with patch("app.worker.process_receipt_image", side_effect=Exception("AI Service Down")), \
-         patch("app.worker.send_telegram_message") as mock_tg:
+    with patch("app.tasks.worker.process_receipt_image", side_effect=Exception("AI Service Down")), \
+         patch("app.tasks.worker.send_telegram_message") as mock_tg:
         
         # We expect the task to raise the exception after notifying Telegram
         with pytest.raises(Exception):
@@ -124,14 +124,14 @@ async def test_process_receipt_task_failure_notifies_telegram(db_session):
 async def test_send_telegram_message_network_error():
     """Verify that network errors during Telegram sends are logged."""
     # Patch the settings object
-    with patch("app.worker.settings") as mock_settings:
+    with patch("app.tasks.worker.settings") as mock_settings:
         mock_settings.TELEGRAM_BOT_TOKEN = "fake-token"
         
-        with patch("app.worker.httpx.AsyncClient") as mock_client_class:
+        with patch("app.tasks.worker.httpx.AsyncClient") as mock_client_class:
             mock_instance = mock_client_class.return_value.__aenter__.return_value
             mock_instance.post = AsyncMock(side_effect=httpx.RequestError("Connection Refused"))
             
-            with patch("app.worker.logger") as mock_log:
+            with patch("app.tasks.worker.logger") as mock_log:
                 await send_telegram_message(12345, "Test message")
 
                 mock_log.error.assert_called()
