@@ -75,6 +75,10 @@ ENV IPYTHONDIR=/root/.ipython
 # Expose port
 EXPOSE 8000
 
+#LN/CRLF conversion
+RUN apt-get update && apt-get install -y dos2unix && \
+    dos2unix /app/pytest.ini /app/entrypoint.sh
+
 # Set the entrypoint
 ENTRYPOINT ["/entrypoint.sh"]
 
