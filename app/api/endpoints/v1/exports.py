@@ -6,10 +6,12 @@ from fastapi.responses import FileResponse
 from celery.result import AsyncResult
 from app.core.celery_app import celery_app
 
-# This router should be included in main.py with prefix="/receipts"
-router = APIRouter()
+router = APIRouter(
+    prefix="/exports",
+    tags=["Exports"]
+)
 
-@router.post("/export", status_code=202)
+@router.post("/", status_code=202)
 async def trigger_export(chat_id: Optional[int] = None):
     """
     Initiates an Excel export task.
@@ -17,17 +19,16 @@ async def trigger_export(chat_id: Optional[int] = None):
     # Use .hex[:8] for a shorter, cleaner filename
     file_name = f"report_{uuid.uuid4().hex[:8]}.xlsx"
     
-    # Using string name for the task is the 'clinical' way to avoid circular imports
+    # Using string name for the task to avoid circular imports
     task = celery_app.send_task("app.tasks.worker.generate_export_task", args=[file_name, chat_id])
     
     return {
         "task_id": task.id,
         "message": "Export started",
-        # Note: If your router prefix is /receipts, this URL is correct.
-        "poll_url": f"/receipts/export/status/{task.id}"
+        "poll_url": f"/api/v1/exports/status/{task.id}"
     }
 
-@router.get("/export/status/{task_id}")
+@router.get("/status/{task_id}")
 async def get_export_status(task_id: str):
     task_result = AsyncResult(task_id, app=celery_app)
     

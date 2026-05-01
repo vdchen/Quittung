@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Quittung"
     API_V1_PREFIX: str = "/api/v1"
     ENVIRONMENT: str = "development"
+    API_URL: str = "http://api:8000/api/v1"
     
     # Database
     DATABASE_URL: str

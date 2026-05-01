@@ -6,7 +6,10 @@ from app.tasks.worker import process_receipt_task
 from app.core.celery_app import celery_app
 
 
-router = APIRouter()
+router = APIRouter(
+    prefix="/receipts",
+    tags=["Receipts"]
+)
 
 # Ensure upload directory exists
 UPLOAD_DIR = "uploads"

@@ -1,22 +1,13 @@
 from fastapi import FastAPI
 import uvicorn
+from app.api.endpoints.v1.api import api_router
 from app.config import settings
-from app.api.endpoints import receipts, exports
 
 
 app = FastAPI(title=settings.PROJECT_NAME)
 
 # Mount routers
-app.include_router(
-    receipts.router, 
-    prefix=f"{settings.API_V1_PREFIX}/receipts", 
-    tags=["Receipts"]
-)
-app.include_router(
-    exports.router, 
-    prefix=f"{settings.API_V1_PREFIX}/exports", 
-    tags=["Exports"]
-)
+app.include_router(api_router, prefix=settings.API_V1_PREFIX)
 
 @app.get("/health", tags=["System"])
 async def health_check():

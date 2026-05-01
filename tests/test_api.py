@@ -5,7 +5,7 @@ from tests.utils import get_url
 
 @pytest.mark.asyncio
 async def test_upload_receipt_endpoint(client):
-    with patch("app.api.endpoints.receipts.process_receipt_task.delay") as mock_task:
+    with patch("app.api.endpoints.v1.receipts.process_receipt_task.delay") as mock_task:
         mock_task.return_value.id = "fake-task-id"
         files = {"file": ("test.jpg", b"fake-image-content", "image/jpeg")}
         data = {"chat_id": "12345"}
@@ -20,12 +20,12 @@ async def test_upload_receipt_endpoint(client):
 @pytest.mark.asyncio
 async def test_get_export_status_not_found(client):
     fake_task_id = "non-existent-id"
-    with patch("app.api.endpoints.exports.AsyncResult") as mock_result:
+    with patch("app.api.endpoints.v1.exports.AsyncResult") as mock_result:
         mock_result.return_value.state = "PENDING"
         mock_result.return_value.info = None 
         
         # CORRECT: get_url handles the versioning and slashes
-        response = await client.get(get_url(f"/exports/export/status/{fake_task_id}"))
+        response = await client.get(get_url(f"/exports/status/{fake_task_id}"))
         assert response.status_code == 404
 
 @pytest.mark.asyncio
@@ -33,21 +33,21 @@ async def test_get_export_status_success(client, tmp_path):
     fake_file = tmp_path / "test.xlsx"
     fake_file.write_text("dummy data")
     
-    with patch("app.api.endpoints.exports.AsyncResult") as mock_res:
+    with patch("app.api.endpoints.v1.exports.AsyncResult") as mock_res:
         mock_res.return_value.state = "SUCCESS"
         mock_res.return_value.result = {"file_path": str(fake_file)}
         
-        response = await client.get(get_url("/exports/export/status/some-id"))
+        response = await client.get(get_url("/exports/status/some-id"))
         assert response.status_code == 200
         assert response.headers["content-type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 @pytest.mark.asyncio
 async def test_get_export_status_failure(client):
-    with patch("app.api.endpoints.exports.AsyncResult") as mock_res:
+    with patch("app.api.endpoints.v1.exports.AsyncResult") as mock_res:
         mock_res.return_value.state = "FAILURE"
         mock_res.return_value.info = "Database connection error"
         
-        response = await client.get(get_url("/exports/export/status/fail-id"))
+        response = await client.get(get_url("/exports/status/fail-id"))
         assert response.status_code == 200
         assert response.json()["status"] == "FAILED"
 
@@ -60,7 +60,7 @@ async def test_upload_receipt_invalid_type(client):
 
 @pytest.mark.asyncio
 async def test_get_receipt_status_success(client):
-    with patch("app.api.endpoints.receipts.AsyncResult") as mock_res:
+    with patch("app.api.endpoints.v1.receipts.AsyncResult") as mock_res:
         mock_res.return_value.status = "SUCCESS"
         mock_res.return_value.result = {"receipt_id": 1, "merchant": "REWE"}
         
@@ -70,7 +70,7 @@ async def test_get_receipt_status_success(client):
 
 @pytest.mark.asyncio
 async def test_get_receipt_status_failure(client):
-    with patch("app.api.endpoints.receipts.AsyncResult") as mock_res:
+    with patch("app.api.endpoints.v1.receipts.AsyncResult") as mock_res:
         mock_res.return_value.status = "FAILURE"
         mock_res.return_value.info = "OCR Engine Timeout"
         

@@ -36,10 +36,9 @@ quittung/
 ├── app/
 │   ├── api/
 │   │   └── v1/
-│   │       └── endpoints/      # Auth, Users, and Receipt processing
+│   │       └── endpoints/      # Aggregator, Exports and Receipt endpoints
 │   ├── bot/
-│   │   ├── handlers/           # Telegram command/document handlers
-│   │   └── middlewares/        # Auth & Logging middlewares
+│   │   └──                     # Telegram command/document handlers
 │   ├── core/
 │   │   ├── config.py           # Settings & Env vars
 │   │   ├── security.py         # JWT & Password logic
@@ -60,12 +59,6 @@ quittung/
 ├── docker-compose.yml          # Container orchestration
 └── README.md
 
-## Security & Password Policy
-To ensure financial data integrity, passwords must meet high-security standards:
-
-* **Length:** 8-24 characters.
-* **Must contain:** At least one digit (0-9), one lowercase (a-z), one uppercase (A-Z), and one special character.
-* **Strict Restrictions:** Characters @, ", ', <, > are forbidden to prevent injection/parsing issues.
 
 ## Installation & Setup
 
