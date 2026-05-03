@@ -3,8 +3,9 @@ import uuid
 import httpx
 from fastapi import APIRouter, Request, Header, HTTPException
 from aiogram import types, Bot, Dispatcher, F
+from aiogram.filters import CommandStart, Command
 from app.core.config import settings
-from app.tasks.worker import process_receipt_task
+from app.tasks.worker import process_receipt_task, generate_export_task
 
 router = APIRouter(prefix="/telegram", tags=["Telegram Webhook"])
 
@@ -49,6 +50,45 @@ async def telegram_webhook(
     update = types.Update(**update_data)
     await dp.feed_update(bot=bot, update=update)
     return {"status": "ok"}
+
+
+@dp.message(CommandStart())
+async def command_start_handler(message: types.Message):
+    """Handle /start command."""
+    await message.answer(
+        f"Hi {message.from_user.full_name}! 👋\n\n"
+        "I am Quittung Bot. Send me a photo or a PDF of your receipt, "
+        "and I will help you process it!\n\n"
+        "📊 *Commands*:\n"
+        "• /export - Get an Excel report of all your receipts.\n"
+        "• /help - Shows help message.\n\n"
+    )
+
+
+@dp.message(Command("help"))
+async def command_help_handler(message: types.Message):
+    """Handle /help command."""
+    await message.answer(
+        "📖 *Quittung Bot Help*\n\n"
+        "You can send me:\n"
+        "1. 📄 *PDF Files* - PDF receipts will be parsed.\n"
+        "2. 📸 *Photos* - Image receipts will be processed using OCR.\n\n"
+        "📊 *Commands*:\n"
+        "• /start - Shows start message.\n"
+        "• /export - Get an Excel report of all your receipts.\n"
+        "• /help - Shows help message.\n\n"
+        "Just upload a file or use a command!",
+        parse_mode="Markdown"
+    )
+
+
+@dp.message(Command("export"))
+async def command_export_handler(message: types.Message):
+    """Handle /export command."""
+    # Use a shorter filename for the task
+    file_name = f"report_{uuid.uuid4().hex[:8]}.xlsx"
+    generate_export_task.delay(file_name, message.chat.id)
+    await message.answer("⏳ Generating your Excel report... Please wait a moment.")
 
 
 @dp.message(F.document)

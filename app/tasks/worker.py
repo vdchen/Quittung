@@ -193,6 +193,11 @@ def generate_export_task(file_name: str, chat_id: int | None = None):
                     file_path=output_path,
                     caption="Here is your spending report! 📊",
                 )
+            elif chat_id:
+                await send_telegram_message(
+                    chat_id=chat_id,
+                    text="📭 <b>No receipts found.</b> You haven't uploaded any receipts yet!"
+                )
 
             return {"status": "completed", "file_path": output_path}
 
