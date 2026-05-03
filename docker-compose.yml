@@ -2,96 +2,96 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: ${POSTGRES_USER-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD-postgres}
-      POSTGRES_DB: ${POSTGRES_DB-postgres}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-quittung_db}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "${DB_PORT}:5432"
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-quittung_test_db}" ]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-quittung_db}"]
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
     networks:
-      - quittung_network  
+      - quittung_network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "${REDIS_PORT}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
+    restart: unless-stopped
     networks:
-      - quittung_network  
+      - quittung_network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
 
-  worker:
+  migrations:
     build: .
-    command: watchmedo auto-restart --directory=./app --pattern=*.py --recursive -- celery -A app.core.celery_app worker --loglevel=info
-    volumes:
-      - .:/app
-      - ./uploads:/app/uploads
-    environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=${REDIS_URL}
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - ENVIRONMENT=${ENVIRONMENT}
-    depends_on:
-      redis:
-        condition: service_healthy
-      db:
-        condition: service_healthy
-    networks:
-      - quittung_network  
-
-  api:
-    build: .
-    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
-    volumes:
-      - .:/app
-      - ./uploads:/app/uploads
-    ports:
-      - "${API_PORT}:8000"
-    environment:
-      - APP_NAME=${APP_NAME}
-      - DEBUG=${DEBUG}
-      - API_V1_PREFIX=${API_V1_PREFIX}
-      - ENVIRONMENT=${ENVIRONMENT}
-      - SECRET_KEY=${SECRET_KEY}
-      - ALGORITHM=${ALGORITHM}
-      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
-      - CORS_ORIGINS=${CORS_ORIGINS}
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=${REDIS_URL}
-      - REDIS_SESSION_PREFIX=${REDIS_SESSION_PREFIX}
-      - REDIS_SESSION_EXPIRE_SECONDS=${REDIS_SESSION_EXPIRE_SECONDS}
+    command: alembic upgrade head
+    env_file:
+      - ${ENV_FILE:-.env}
     depends_on:
       db:
         condition: service_healthy
-      redis:
-        condition: service_healthy
-    stdin_open: true
-    tty: true
+    environment:
+      - DATABASE_URL
+      - REDIS_URL
     networks:
       - quittung_network
 
-  quittung_bot:
-    build:
-      context: .
-      dockerfile: Dockerfile.bot
-    environment:
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - API_URL=${API_URL}
+  api:
+    build: .
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    volumes:
+      - uploads_data:/app/uploads 
+    env_file:
+      - ${ENV_FILE:-.env}
     depends_on:
-      - api
-    restart: always
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
+    environment:
+      - DATABASE_URL
+      - REDIS_URL
+    restart: unless-stopped
+    networks:
+      - quittung_network
+
+  worker:
+    build: .
+    command: celery -A app.core.celery_app worker --loglevel=info
+    volumes:
+      - uploads_data:/app/uploads
+    env_file:
+      - ${ENV_FILE:-.env}
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
+    environment:
+      - DATABASE_URL
+      - REDIS_URL
+    restart: unless-stopped
     networks:
       - quittung_network
 
@@ -102,3 +102,4 @@ networks:
 volumes:
   postgres_data:
   redis_data:
+  uploads_data:

@@ -24,7 +24,13 @@ async def upload_receipt(file: UploadFile = File(...),
         raise HTTPException(status_code=400, detail="Invalid file type")
 
     # 2. Generate a secure, unique filename to prevent overwrites
-    file_extension = file.filename.split(".")[-1] if "." in file.filename else "jpg"
+    CONTENT_TYPE_MAP = {
+        "application/pdf": "pdf",
+        "image/jpeg": "jpg",
+        "image/png": "png"
+    }
+    
+    file_extension = CONTENT_TYPE_MAP[file.content_type]
     unique_filename = f"{uuid.uuid4()}.{file_extension}"
     file_path = os.path.join(UPLOAD_DIR, unique_filename)
 

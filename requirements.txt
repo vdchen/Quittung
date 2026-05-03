@@ -24,6 +24,7 @@ aiogram==3.26.0
 alembic==1.18.4
 asyncpg==0.31.0
 sqlalchemy[asyncio]==2.0.46
+python-dateutil>=2.9.0
 
 # Data Processing and Export
 pandas==3.0.2
@@ -31,8 +32,8 @@ openpyxl==3.1.5
 
 # Tasks and Async
 redis[hiredis]==7.1.1
-celery
-watchdog
+celery>=5.4,<6.0
+watchdog>=4.0
 
 #Cache
 aiocache==0.12.3
@@ -40,14 +41,13 @@ aiocache==0.12.3
 # Auth and Security
 pyjwt==2.11.0
 bcrypt==5.0.0
-pwdlib[argon2]
-python-multipart==0.0.22
+pwdlib[argon2]>=0.2.1
+python-dotenv==1.2.1
 email-validator==2.3.0
 
 # Utilities
-python-dotenv==1.2.1
-structlog            
-python-magic
+structlog>=24.0
+python-magic>=0.4.27
 
 # Development and Shell
 ipython==9.10.0
@@ -55,6 +55,7 @@ ipython==9.10.0
 # Testing
 pytest==9.0.2
 pytest-asyncio==1.3.0
+pytest-dotenv>=0.5.2
 pytest-cov==7.0.0
 httpx==0.28.1
 faker==40.4.0

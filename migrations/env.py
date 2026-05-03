@@ -7,7 +7,9 @@ from alembic import context
 # 1. Imports
 from app.db.base import Base
 from app.models.receipt import Receipt, LineItem
-from app.db.session import DATABASE_URL
+from app.core.config import settings
+
+DATABASE_URL = settings.DATABASE_URL
 
 target_metadata = Base.metadata
 config = context.config
@@ -27,7 +29,11 @@ def do_run_migrations(connection):
         context.run_migrations()
         print("Migration committed!")
 
+from app.db.utils import create_db_if_not_exists
+
 async def run_async_migrations():
+    # Ensure the database exists before trying to connect for migrations
+    await create_db_if_not_exists(DATABASE_URL)
 
     connectable = create_async_engine(DATABASE_URL, poolclass=pool.NullPool)
 

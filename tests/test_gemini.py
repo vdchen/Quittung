@@ -1,6 +1,5 @@
 import asyncio
 import pytest
-import os
 from app.services.ai_service import process_receipt_image
 
 

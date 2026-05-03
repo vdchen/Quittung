@@ -1,3 +1,4 @@
+import uuid
 import pandas as pd
 import asyncio
 from sqlalchemy import select
@@ -8,8 +9,12 @@ from app.models.receipt import Receipt
 async def generate_expenses_report(
         db: AsyncSession, 
         telegram_id: int,
-        file_name: str = "report.xlsx"
+        file_name: str = None
         ) -> str:
+    
+    if file_name is None:
+        file_name = f"report_{telegram_id}_{uuid.uuid4().hex[:8]}.xlsx"
+        
     # 1. Fetch data with Line Items (Eager Loading)
 														  
     stmt = (

@@ -16,17 +16,20 @@ jobs:
 
       - name: Create .env.test file
         run: |
-          # Use default values for Docker Compose interpolation to stop the warnings
+          echo "ENVIRONMENT=testing" > .env.test
           echo "PROJECT_NAME=quittung" >> .env.test
+          echo "SECRET_KEY=test_secret_key_change_me" >> .env.test
           echo "POSTGRES_USER=postgres" >> .env.test
           echo "POSTGRES_PASSWORD=postgres" >> .env.test
           echo "POSTGRES_DB=quittung_test_db" >> .env.test
           echo "DB_PORT=5432" >> .env.test
           echo "REDIS_PORT=6379" >> .env.test
           
-          # Inject actual secrets from GitHub
-          echo "DATABASE_URL=${{ secrets.TEST_DATABASE_URL }}" >> .env.test
-          echo "REDIS_URL=${{ secrets.TEST_REDIS_URL }}" >> .env.test
+          # Internal Docker network URLs
+          echo "DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/quittung_test_db" >> .env.test
+          echo "REDIS_URL=redis://redis:6379/0" >> .env.test
+          
+          # Optional secrets
           echo "GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}" >> .env.test
           echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" >> .env.test
 
@@ -36,17 +39,9 @@ jobs:
           DATABASE_URL: "postgresql+asyncpg://postgres:postgres@db:5432/quittung_test_db"
           REDIS_URL: "redis://redis:6379/0"
         run: |
-          docker compose -p quittung up -d db redis
-          
-          # This ignores errors if the DB already exists
-          docker compose -p quittung exec -T db sh -c 'until pg_isready -U postgres; do sleep 1; done; psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname = '"'quittung_test_db'"'" | grep -q 1 || psql -U postgres -c "CREATE DATABASE quittung_test_db"'
-          
-          # 3. Run the tests in the API container
-          docker compose -p quittung run \
-            -e GOOGLE_API_KEY=$GOOGLE_API_KEY \
-            -e DATABASE_URL=$DATABASE_URL \
-            -e REDIS_URL=$REDIS_URL \
-            --rm api pytest --cov=app --cov-report=xml --cov-report=term-missing
+          # The database creation is now handled automatically by the application code
+          # added in migrations/env.py and tests/conftest.py.
+          ENV_FILE=.env.test docker compose -p quittung run --rm api pytest --cov=app --cov-report=xml --cov-report=term-missing
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3

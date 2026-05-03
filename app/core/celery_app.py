@@ -1,13 +1,13 @@
-import os
 from celery import Celery
+from app.core.config import settings
 
 celery_app = Celery(
     "worker",
-    broker=os.getenv("REDIS_URL", "redis://redis:6379/0"),
-    backend=os.getenv("REDIS_URL", "redis://redis:6379/0"),
+    broker=settings.REDIS_URL,
+    backend=settings.REDIS_URL,
     include=["app.tasks.worker"],
 )
 
 celery_app.conf.task_routes = {
-    #"app.tasks.worker.process_receipt_task": "main-queue",
+    # "app.tasks.worker.process_receipt_task": "main-queue",
 }

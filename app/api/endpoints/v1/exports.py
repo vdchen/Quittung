@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import FileResponse
 from celery.result import AsyncResult
 from app.core.celery_app import celery_app
+from app.tasks.worker import generate_export_task
 
 router = APIRouter(
     prefix="/exports",
@@ -19,8 +20,7 @@ async def trigger_export(chat_id: Optional[int] = None):
     # Use .hex[:8] for a shorter, cleaner filename
     file_name = f"report_{uuid.uuid4().hex[:8]}.xlsx"
     
-    # Using string name for the task to avoid circular imports
-    task = celery_app.send_task("app.tasks.worker.generate_export_task", args=[file_name, chat_id])
+    task = generate_export_task.delay(file_name, chat_id)
     
     return {
         "task_id": task.id,

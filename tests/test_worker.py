@@ -94,7 +94,7 @@ async def test_generate_export_task_success(db_session):
     # Patch 'settings' inside app.tasks.worker
     with patch("app.tasks.worker.async_session_maker") as mock_session_factory, \
          patch("app.tasks.worker.settings") as mock_settings, \
-         patch("app.services.export_service.generate_expenses_report") as mock_gen, \
+         patch("app.tasks.worker.generate_expenses_report") as mock_gen, \
          patch("app.tasks.worker.send_telegram_document", new_callable=AsyncMock) as mock_tg_doc:
 
         # Configure the mock settings

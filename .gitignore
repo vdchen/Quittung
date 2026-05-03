@@ -60,6 +60,7 @@ db.sqlite3-journal
 .ruff_cache/
 .ipynb_checkpoints
 .dockerignore
+docker-compose.override.yml
 
 # --- OS Specific ---
 .DS_Store

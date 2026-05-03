@@ -14,7 +14,8 @@ class Receipt(Base):
     currency = Column(String, default="EUR")
     date = Column(DateTime(timezone=True), server_default=func.now())
     status = Column(String, default="pending")  # pending, completed, failed
-    image_url = Column(String, nullable=True)
+    # Renamed from image_url: this is a local filesystem path, not a URL.
+    file_path = Column(String, nullable=True)
 
     # Relationship to individual items
     items = relationship("LineItem", back_populates="receipt",
