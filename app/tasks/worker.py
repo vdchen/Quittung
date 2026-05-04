@@ -210,3 +210,34 @@ def generate_export_task(file_name: str, chat_id: int | None = None):
         return loop.create_task(_run())
     else:
         return asyncio.run(_run())
+
+
+@celery_app.task(name="app.tasks.worker.cleanup_uploads_task")
+def cleanup_uploads_task():
+    """
+    Periodic task to delete files from the uploads directory that are older 
+    than settings.UPLOAD_CLEANUP_HOURS (default: 24h).
+    """
+    import time
+
+    upload_dir = "uploads"
+    if not os.path.exists(upload_dir):
+        return {"status": "skipped", "reason": "directory not found"}
+
+    now = time.time()
+    cutoff = now - (settings.UPLOAD_CLEANUP_HOURS * 3600)
+    deleted_count = 0
+
+    for filename in os.listdir(upload_dir):
+        file_path = os.path.join(upload_dir, filename)
+        if os.path.isfile(file_path):
+            file_mtime = os.path.getmtime(file_path)
+            if file_mtime < cutoff:
+                try:
+                    os.remove(file_path)
+                    deleted_count += 1
+                    logger.info(f"Deleted old upload: {filename}")
+                except Exception as e:
+                    logger.error(f"Failed to delete {filename}: {e}")
+
+    return {"status": "success", "deleted_count": deleted_count}

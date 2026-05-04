@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     # the webhook with Telegram via set_webhook(secret_token=...).
     TELEGRAM_WEBHOOK_SECRET: str | None = None
 
+    # Storage
+    UPLOAD_CLEANUP_HOURS: int = 24
+
     model_config = SettingsConfigDict(
         env_file=TARGET_ENV_FILE,
         env_file_encoding="utf-8",

@@ -95,6 +95,25 @@ services:
     networks:
       - quittung_network
 
+  beat:
+    build: .
+    command: celery -A app.core.celery_app beat --loglevel=info
+    env_file:
+      - ${ENV_FILE:-.env}
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
+    environment:
+      - DATABASE_URL
+      - REDIS_URL
+    restart: unless-stopped
+    networks:
+      - quittung_network
+
 networks:
   quittung_network:
     driver: bridge
