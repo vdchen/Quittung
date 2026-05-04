@@ -1,5 +1,6 @@
 import asyncio
 from celery import current_task
+from celery.exceptions import Retry
 import httpx
 import os
 import logging
@@ -144,12 +145,42 @@ def process_receipt_task(file_path: str, mime_type: str, chat_id: int | None = N
 
             return {"status": "success", "id": receipt_obj.id}
 
+        except Retry:
+            raise
         except Exception as e:
+            from pydantic import ValidationError
+            error_msg = str(e).lower()
+            # Be careful with "format" as it matches "information" in pydantic error URLs
+            is_client_error = any(kw in error_msg for kw in ["password", "encrypted", "protected", "invalid image"]) or "unsupported file format" in error_msg
+            
             retries = current_task.request.retries if current_task and current_task.request else 0
             max_retries = current_task.max_retries if current_task else 5
             
             logger.error(f"Task failed (Attempt {retries}/{max_retries}): {e}")
             
+            # If it's a client error (encrypted, bad format), don't retry
+            if is_client_error:
+                if chat_id:
+                    if "password" in error_msg or "encrypted" in error_msg:
+                        msg = "❌ <b>Processing Failed:</b> This PDF is password protected and cannot be processed. Please upload an unencrypted version."
+                    else:
+                        msg = f"❌ <b>Processing Failed:</b> {str(e)}"
+                    await send_telegram_message(chat_id, msg)
+                return {"status": "error", "message": str(e)}
+
+            # Handle Pydantic Validation Errors (Invalid AI response)
+            if isinstance(e, ValidationError):
+                logger.warning(f"AI returned data that failed validation: {e}")
+                if chat_id and retries >= max_retries:
+                    await send_telegram_message(
+                        chat_id,
+                        "❌ <b>Processing Failed:</b> The AI service returned an invalid response. We tried to recover but failed. Please try again with a clearer image."
+                    )
+                # We SHOULD retry validation errors because Gemini might succeed on a second try (non-deterministic)
+                if current_task and retries < max_retries:
+                    raise current_task.retry(exc=e)
+                return {"status": "error", "message": "AI validation failed"}
+
             # If we haven't reached max retries, trigger a retry
             if current_task and retries < max_retries:
                 raise current_task.retry(exc=e)
@@ -206,6 +237,8 @@ def generate_export_task(file_name: str, chat_id: int | None = None):
 
                 return {"status": "completed", "file_path": output_path}
         
+        except Retry:
+            raise
         except Exception as e:
             retries = current_task.request.retries if current_task and current_task.request else 0
             max_retries = current_task.max_retries if current_task else 3

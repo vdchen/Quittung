@@ -9,6 +9,7 @@
 - **Multimodal AI Extraction** — Powered by **Google Gemini 2.5 Flash**; reads receipt layouts natively without traditional OCR tuning.
 - **Intelligent Categorisation** — Automatically groups items (e.g. *"Bio-Milch"* → *"Dairy"*) using LLM semantic understanding.
 - **Asynchronous Pipeline** — Heavy processing is offloaded to **Celery + Redis** workers; the API stays responsive at all times.
+- **Robust Error Handling** — Resilient to password-protected PDFs, corrupted images, and malformed AI responses with automatic retries and user-friendly notifications.
 - **Telegram Webhook** — Receives photos and PDFs via a signed webhook; duplicate receipts are detected and skipped.
 - **Excel Export** — Generates multi-sheet reports with monthly breakdowns and category analytics.
 - **Secure Webhook** — Every Telegram update is verified with a `X-Telegram-Bot-Api-Secret-Token` header.
@@ -63,10 +64,14 @@ quittung/
 ├── migrations/              # Alembic revisions
 ├── tests/
 │   ├── conftest.py          # pytest-asyncio fixtures (DB, HTTP client)
-│   ├── test_api.py
-│   ├── test_services.py
-│   ├── test_worker.py
-│   └── test_pipeline.py     # Integration test (real Gemini call)
+│   ├── test_api.py          # API endpoint unit tests
+│   ├── test_services.py     # DB service unit tests
+│   ├── test_worker.py       # Worker task unit tests (shallow mocks)
+│   ├── test_integration_ai.py # Deep integration tests (mocking Gemini SDK)
+│   ├── test_negative.py     # Edge cases (corrupted files, protected PDFs)
+│   ├── test_pipeline.py     # Integration test (real Gemini call)
+│   ├── test_cleanup.py      # File cleanup task tests
+│   └── test_race_conditions.py # Duplicate detection race condition tests
 ├── docker-compose.yml       # Production services
 ├── docker-compose.override.yml  # Dev overrides (hot-reload, port bindings)
 ├── Dockerfile
@@ -169,20 +174,20 @@ chat_id   = 12345678   (optional — enables Telegram notifications)
 
 ## Running Tests
 
-Tests use a dedicated PostgreSQL database (`quittung_test_db`). The test environment is loaded from `.env.test` automatically via **pytest-dotenv** — no manual env switching needed.
+Tests use a dedicated PostgreSQL database (`quittung_test_db`) and are best executed inside the Docker environment to ensure network isolation.
 
 ```bash
-# Inside the api container
-docker compose exec api pytest
+# Execute all tests inside the api container
+docker-compose exec api sh -c "ENVIRONMENT=testing pytest --cov=app tests/"
 
-# With coverage
-docker compose exec api pytest --cov=app --cov-report=term-missing
+# With a detailed coverage report for specific lines
+docker-compose exec api sh -c "ENVIRONMENT=testing pytest --cov=app --cov-report=term-missing tests/"
 
-# Unit tests only (skip Gemini integration)
-docker compose exec api pytest -m "not integration"
+# Unit tests only (skip real Gemini integration)
+docker-compose exec api sh -c "ENVIRONMENT=testing pytest -m 'not integration'"
 ```
 
-> **Note:** `test_pipeline.py` and `test_gemini.py` make real calls to the Gemini API and require a valid `GOOGLE_API_KEY`. Mark them with `-m integration` and skip in CI if needed.
+> **Note:** `test_pipeline.py` makes real calls to the Gemini API. These are marked as `integration` tests.
 
 ---
 
@@ -209,6 +214,10 @@ docker compose exec api pytest -m "not integration"
 
 - **Identity via `chat_id`**: For a Telegram-first application, `chat_id` is the natural identity anchor. When using the Telegram Bot, this ID is guaranteed by Telegram's signed webhooks.
 - **Access via `API_KEY`**: While `chat_id` identifies the *owner* of a receipt, the REST API endpoints themselves are protected by a mandatory `API_KEY`. This ensures that even if an attacker knows a `chat_id`, they cannot upload receipts or trigger exports without the server's secret key.
+
+### Robust AI Integration
+
+The application treats the AI service as non-deterministic. We implement **deep integration testing** (mocking at the `google-genai` SDK level) to ensure our Pydantic validation handles any malformed JSON from the model. Transient AI errors (parsing issues, timeouts) are automatically retried with exponential backoff, while permanent issues (encrypted files) are reported immediately to the user.
 
 ### Celery + async
 

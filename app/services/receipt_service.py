@@ -63,6 +63,14 @@ async def save_extracted_receipt(
 
     except Exception as e:
         await db.rollback()
+        
+        # Handle race condition where two workers try to insert the same receipt at once
+        # causing a UniqueConstraint violation in the database.
+        error_msg = str(e).lower()
+        if "unique" in error_msg or "duplicate" in error_msg:
+            logger.info(f"Duplicate receipt blocked by DB constraint for user {telegram_id}.")
+            return None
+            
         logger.error(f"Failed to save receipt: {str(e)}")
         raise
 

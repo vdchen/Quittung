@@ -46,7 +46,17 @@ class Settings(BaseSettings):
 
     # Storage
     UPLOAD_CLEANUP_HOURS: int = 24
-
+    
+    # Supported file formats for Gemini
+    SUPPORTED_MIME_TYPES: List[str] = [
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "image/heic",
+        "image/heif",
+        "application/pdf",
+    ]
+    
     model_config = SettingsConfigDict(
         env_file=TARGET_ENV_FILE,
         env_file_encoding="utf-8",

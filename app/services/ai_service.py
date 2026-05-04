@@ -21,6 +21,9 @@ async def process_receipt_image(
     The underlying SDK call is synchronous, so it is executed in a thread-pool
     executor to avoid blocking the async event loop.
     """
+    if mime_type not in settings.SUPPORTED_MIME_TYPES:
+        raise ValueError(f"Unsupported file format: {mime_type}")
+
     client = _get_genai_client()
 
     prompt = (

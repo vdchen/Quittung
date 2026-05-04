@@ -3,7 +3,7 @@ from pathlib import Path
 from app.services.ai_service import process_receipt_image
 
 # Path to test receipt
-TEST_IMAGE_PATH = Path("/app/tests/sample_receipt.pdf")
+TEST_IMAGE_PATH = Path(__file__).parent / "sample_receipt.pdf"
 
 @pytest.mark.asyncio
 async def test_process_receipt_integration():
@@ -34,9 +34,3 @@ async def test_process_receipt_integration():
     for item in result.items:
         assert item.price > 0
         assert isinstance(item.category, str)
-
-@pytest.mark.asyncio
-async def test_invalid_mime_type_raises_error():
-    """Ensure the service handles unsupported files gracefully"""
-    # Placeholder for negative testing
-    pass

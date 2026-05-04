@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Column, Integer, String, Float, DateTime, ForeignKey, func
+from sqlalchemy import BigInteger, Column, Integer, String, Float, DateTime, ForeignKey, func, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from app.db.base import Base
@@ -6,6 +6,13 @@ from app.db.base import Base
 
 class Receipt(Base):
     __tablename__ = "receipts"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "telegram_id", "merchant_name", "total_amount", "date", 
+            name="uq_receipt_duplicate"
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     telegram_id = Column(BigInteger, index=True)

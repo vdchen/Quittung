@@ -110,7 +110,9 @@ async def test_generate_export_task_success(db_session):
 
 @pytest.mark.asyncio
 async def test_process_receipt_task_failure_notifies_telegram(db_session):
-    with patch("app.tasks.worker.process_receipt_image", side_effect=Exception("AI Service Down")), \
+    with patch("builtins.open", mock_open(read_data=b"fake")), \
+         patch("os.path.exists", return_value=True), \
+         patch("app.tasks.worker.process_receipt_image", side_effect=Exception("AI Service Down")), \
          patch("app.tasks.worker.send_telegram_message") as mock_tg, \
          patch("app.tasks.worker.current_task") as mock_task:
         
