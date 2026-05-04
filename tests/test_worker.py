@@ -10,7 +10,7 @@ from app.models.receipt import Receipt
 def mock_extraction_result():
     fixed_date = datetime(2026, 3, 9, 12, 0, 0)
     return ReceiptExtractionSchema(
-        merchant_name="Worker Test Store",
+        merchant_name="Unique Worker Store",
         total_amount=100.0,
         currency="EUR",
         date=fixed_date,
@@ -49,7 +49,7 @@ async def test_process_receipt_task_success(db_session, mock_extraction_result):
         
         # Verify DB entry was created
         receipt = (await db_session.execute(
-            Receipt.__table__.select().where(Receipt.merchant_name == "Worker Test Store")
+            Receipt.__table__.select().where(Receipt.merchant_name == "Unique Worker Store")
         )).first()
         assert receipt is not None
         
@@ -111,14 +111,22 @@ async def test_generate_export_task_success(db_session):
 @pytest.mark.asyncio
 async def test_process_receipt_task_failure_notifies_telegram(db_session):
     with patch("app.tasks.worker.process_receipt_image", side_effect=Exception("AI Service Down")), \
-         patch("app.tasks.worker.send_telegram_message") as mock_tg:
+         patch("app.tasks.worker.send_telegram_message") as mock_tg, \
+         patch("app.tasks.worker.current_task") as mock_task:
         
-        # We expect the task to raise the exception after notifying Telegram
-        with pytest.raises(Exception):
-            await process_receipt_task("fake.jpg", "image/jpeg", chat_id=123)
+        # Simulate that we are on the LAST retry (Attempt 5/5)
+        mock_task.request.retries = 5
+        mock_task.max_retries = 5
         
-        # Verify the error message was sent to the user
-        mock_tg.assert_called_with(123, "❌ <b>Error:</b> Processing failed.")
+        # Execute the task
+        result = await process_receipt_task("fake.jpg", "image/jpeg", chat_id=123)
+        
+        assert result["status"] == "error"
+        # Verify the NEW error message was sent to the user
+        mock_tg.assert_called_with(
+            123, 
+            "❌ <b>Processing Failed:</b> We tried several times but the AI service is currently unavailable. Please try again later."
+        )
 
 @pytest.mark.asyncio
 async def test_send_telegram_message_network_error():

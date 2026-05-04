@@ -18,6 +18,10 @@ config.set_main_option("sqlalchemy.url", DATABASE_URL)
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
+import logging
+
+logger = logging.getLogger("alembic.runtime.migration")
+
 def do_run_migrations(connection):
     context.configure(
         connection=connection,
@@ -25,9 +29,9 @@ def do_run_migrations(connection):
         render_as_batch=True
     )
     with context.begin_transaction():
-        print("Executing migration transaction...")
+        logger.info("Executing migration transaction...")
         context.run_migrations()
-        print("Migration committed!")
+        logger.info("Migration committed!")
 
 from app.db.utils import create_db_if_not_exists
 
@@ -47,6 +51,6 @@ def run_migrations_online() -> None:
 
 # THE EXECUTION TRIGGER
 if context.is_offline_mode():
-    print("Offline mode.")
+    logger.info("Offline mode.")
 else:
     run_migrations_online()

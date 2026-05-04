@@ -1,4 +1,5 @@
 import asyncio
+from celery import current_task
 import httpx
 import os
 import logging
@@ -77,24 +78,15 @@ async def send_telegram_document(chat_id: int, file_path: str, caption: str = ""
         await _send_telegram_request("sendDocument", payload, files={"document": f})
 
 
-@celery_app.task(name="app.tasks.worker.process_receipt_task")
+@celery_app.task(
+    name="app.tasks.worker.process_receipt_task",
+    max_retries=5,
+    retry_backoff=True,
+    retry_jitter=True,
+)
 def process_receipt_task(file_path: str, mime_type: str, chat_id: int | None = None):
     """
-    Celery task that processes a receipt file end-to-end:
-      1. Read file bytes from disk
-      2. Call Gemini AI for structured extraction
-      3. Persist receipt + line items to the database
-      4. Notify the user via Telegram
-
-    Async implementation detail
-    ----------------------------
-    Celery workers run in a synchronous context (no running event loop).
-    In that case asyncio.run() creates a fresh loop, executes the coroutine
-    to completion, and returns the result — the standard pattern.
-
-    During tests pytest-asyncio provides a running loop, so we schedule the
-    coroutine as a Task on it instead; the test then awaits that Task to get
-    the actual return value.
+    Celery task that processes a receipt file end-to-end with retries for transient failures.
     """
     async def _run():
         try:
@@ -121,8 +113,7 @@ def process_receipt_task(file_path: str, mime_type: str, chat_id: int | None = N
                     )
                     return {"status": "duplicate"}
 
-                # 4. Capture values before the session is closed
-                receipt_id = receipt_obj.id
+                # 4. Format notification
                 merchant = html.escape(extraction.merchant_name or "Unknown")
                 date_str = extraction.date.strftime("%Y-%m-%d") if extraction.date else "N/A"
                 total = extraction.total_amount or 0.00
@@ -133,15 +124,9 @@ def process_receipt_task(file_path: str, mime_type: str, chat_id: int | None = N
                 if extraction.items:
                     items_text = "<b>📦 Items:</b>\n"
                     for item in extraction.items:
-                        if isinstance(item, dict):
-                            name = html.escape(item.get("name", "Unknown Item"))
-                            price = item.get("price", 0.00)
-                            category = html.escape(item.get("category", "Uncategorized"))
-                        else:
-                            name = html.escape(getattr(item, "name", "Unknown Item"))
-                            price = getattr(item, "price", 0.00)
-                            category = html.escape(getattr(item, "category", "Uncategorized"))
-                        items_text += f" • {name} | {price} {currency} (<i>{category}</i>)\n"
+                        name = html.escape(item.get("name", "Item") if isinstance(item, dict) else getattr(item, "name", "Item"))
+                        price = item.get("price", 0.0) if isinstance(item, dict) else getattr(item, "price", 0.0)
+                        items_text += f" • {name} | {price} {currency}\n"
 
             # 6. Success notification (outside session — session is already committed)
             if chat_id:
@@ -153,17 +138,29 @@ def process_receipt_task(file_path: str, mime_type: str, chat_id: int | None = N
                     f"━━━━━━━━━━━━━━━\n"
                     f"{items_text}"
                     f"━━━━━━━━━━━━━━━\n"
-                    f"💰 <b>Total Amount:</b> {total} {currency}\n"
+                    f"💰 <b>Total Amount:</b> {total} {currency}"
                 )
                 await send_telegram_message(chat_id, text)
 
-            return {"status": "success", "receipt_id": receipt_id}
+            return {"status": "success", "id": receipt_obj.id}
 
         except Exception as e:
-            logger.error(f"Task Failed: {str(e)}")
+            retries = current_task.request.retries if current_task and current_task.request else 0
+            max_retries = current_task.max_retries if current_task else 5
+            
+            logger.error(f"Task failed (Attempt {retries}/{max_retries}): {e}")
+            
+            # If we haven't reached max retries, trigger a retry
+            if current_task and retries < max_retries:
+                raise current_task.retry(exc=e)
+
+            # Max retries reached - notify user
             if chat_id:
-                await send_telegram_message(chat_id, "❌ <b>Error:</b> Processing failed.")
-            raise
+                await send_telegram_message(
+                    chat_id, 
+                    "❌ <b>Processing Failed:</b> We tried several times but the AI service is currently unavailable. Please try again later."
+                )
+            return {"status": "error", "message": str(e)}
 
     try:
         loop = asyncio.get_running_loop()
@@ -179,27 +176,50 @@ def process_receipt_task(file_path: str, mime_type: str, chat_id: int | None = N
         return asyncio.run(_run())
 
 
-@celery_app.task(name="app.tasks.worker.generate_export_task")
+@celery_app.task(
+    name="app.tasks.worker.generate_export_task",
+    max_retries=3,
+    retry_backoff=True,
+)
 def generate_export_task(file_name: str, chat_id: int | None = None):
+    """
+    Task to generate an Excel report with retries for transient DB/IO failures.
+    """
     async def _run():
-        async with async_session_maker() as db:
-            output_path = await generate_expenses_report(
-                db, telegram_id=chat_id, file_name=file_name
-            )
-
-            if output_path and chat_id:
-                await send_telegram_document(
-                    chat_id=chat_id,
-                    file_path=output_path,
-                    caption="Here is your spending report! 📊",
+        try:
+            async with async_session_maker() as db:
+                output_path = await generate_expenses_report(
+                    db, telegram_id=chat_id, file_name=file_name
                 )
-            elif chat_id:
+
+                if output_path and chat_id:
+                    await send_telegram_document(
+                        chat_id=chat_id,
+                        file_path=output_path,
+                        caption="Here is your spending report! 📊",
+                    )
+                elif chat_id:
+                    await send_telegram_message(
+                        chat_id=chat_id,
+                        text="📭 <b>No receipts found.</b> You haven't uploaded any receipts yet!"
+                    )
+
+                return {"status": "completed", "file_path": output_path}
+        
+        except Exception as e:
+            retries = current_task.request.retries if current_task and current_task.request else 0
+            max_retries = current_task.max_retries if current_task else 3
+            
+            logger.error(f"Export failed (Attempt {retries}/{max_retries}): {e}")
+            if current_task and retries < max_retries:
+                raise current_task.retry(exc=e)
+            
+            if chat_id:
                 await send_telegram_message(
-                    chat_id=chat_id,
-                    text="📭 <b>No receipts found.</b> You haven't uploaded any receipts yet!"
+                    chat_id,
+                    "❌ <b>Export Failed:</b> Something went wrong while generating your report. Please try again later."
                 )
-
-            return {"status": "completed", "file_path": output_path}
+            return {"status": "error", "message": str(e)}
 
     try:
         loop = asyncio.get_running_loop()

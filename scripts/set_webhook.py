@@ -1,6 +1,14 @@
 import asyncio
+import logging
 from aiogram import Bot
 from app.core.config import settings
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 TELEGRAM_BOT_TOKEN = settings.TELEGRAM_BOT_TOKEN
 TELEGRAM_WEBHOOK_SECRET = settings.TELEGRAM_WEBHOOK_SECRET
@@ -8,17 +16,17 @@ TELEGRAM_WEBHOOK_SECRET = settings.TELEGRAM_WEBHOOK_SECRET
 
 async def main():
     if not TELEGRAM_BOT_TOKEN:
-        print("Error: TELEGRAM_BOT_TOKEN is not set in .env")
+        logger.error("TELEGRAM_BOT_TOKEN is not set in .env")
         return
 
     webhook_url = input("Enter your public HTTPS URL (e.g. https://abc.ngrok.io): ").strip().rstrip("/")
 
     if not webhook_url:
-        print("Webhook URL cannot be empty.")
+        logger.warning("Webhook URL cannot be empty.")
         return
 
     full_url = f"{webhook_url}/api/v1/telegram/webhook"
-    print(f"Setting webhook to: {full_url}")
+    logger.info(f"Setting webhook to: {full_url}")
 
     bot = Bot(token=TELEGRAM_BOT_TOKEN)
 
@@ -30,13 +38,13 @@ async def main():
     )
 
     if result:
-        print("✅ Webhook set successfully!")
+        logger.info("✅ Webhook set successfully!")
         if TELEGRAM_WEBHOOK_SECRET:
-            print("🔒 Secret token is active — spoofed requests will be rejected.")
+            logger.info("🔒 Secret token is active — spoofed requests will be rejected.")
         else:
-            print("⚠️  No TELEGRAM_WEBHOOK_SECRET set. Webhook is unauthenticated.")
+            logger.warning("⚠️  No TELEGRAM_WEBHOOK_SECRET set. Webhook is unauthenticated.")
     else:
-        print("❌ Failed to set webhook.")
+        logger.error("❌ Failed to set webhook.")
 
     await bot.session.close()
 

@@ -1,7 +1,9 @@
 import asyncio
 import pytest
+import logging
 from app.services.ai_service import process_receipt_image
 
+logger = logging.getLogger(__name__)
 
 @pytest.mark.asyncio
 async def test_extraction():
@@ -11,15 +13,15 @@ async def test_extraction():
     with open(image_path, "rb") as f:
         image_bytes = f.read()
 
-    print("Sending to Gemini...")
+    logger.info("Sending to Gemini...")
     result = await process_receipt_image(image_bytes, mime_type="application/pdf")
 
-    print("\n EXTRACTION SUCCESSFUL:")
-    print(f"Store: {result.merchant_name}")
-    print(f"Total: {result.total_amount} {result.currency}")
-    print(f"Items found: {len(result.items)}")
+    logger.info("EXTRACTION SUCCESSFUL:")
+    logger.info(f"Store: {result.merchant_name}")
+    logger.info(f"Total: {result.total_amount} {result.currency}")
+    logger.info(f"Items found: {len(result.items)}")
     for item in result.items:
-        print(f" - {item.name}: {item.price} ({item.category})")
+        logger.info(f" - {item.name}: {item.price} ({item.category})")
 
 if __name__ == "__main__":
     asyncio.run(test_extraction())

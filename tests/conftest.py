@@ -22,6 +22,10 @@ TestSessionLocal = async_sessionmaker(
 
 from app.db.utils import create_db_if_not_exists
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def setup_db():
     """Create all tables once before the test session; drop them after."""
@@ -39,15 +43,36 @@ async def setup_db():
 
     yield
     await r.close()
-    # Removed drop_all to prevent accidental wiping of dev database
+    
+    # SAFETY SHIELD: Only drop tables if we are 100% sure we are in a test database
+    if "test" in settings.DATABASE_URL.lower():
+        async with test_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+    else:
+        logger.warning("Skipping database cleanup: Not a test database URL.")
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def clean_db():
+    """Wipe all tables before each test to ensure isolation."""
+    # Check both URL and ENVIRONMENT for safety
+    is_test_db = "test" in settings.DATABASE_URL.lower() or settings.ENVIRONMENT == "testing"
+    
+    if is_test_db:
+        async with test_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+            await conn.run_sync(Base.metadata.create_all)
+    yield
 
 
 @pytest_asyncio.fixture
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
-    """Provide a transactional test session that always rolls back on teardown."""
+    """Provide a transactional test session."""
     async with TestSessionLocal() as session:
         yield session
-        await session.rollback()
+        # No rollback needed if we wipe the DB before each test, 
+        # but it's good practice to close cleanly.
+        await session.close()
 
 
 @pytest_asyncio.fixture

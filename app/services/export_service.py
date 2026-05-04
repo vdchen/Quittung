@@ -42,6 +42,9 @@ async def generate_expenses_report(
                 "Currency": r.currency
             })
 
+    if not flattened_data:
+        return None
+
     # 3. Data Processing
     df = pd.DataFrame(flattened_data)
     

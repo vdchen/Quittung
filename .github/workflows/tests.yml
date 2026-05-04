@@ -36,6 +36,7 @@ jobs:
 
       - name: Run tests in Docker
         env:
+          ENVIRONMENT: testing
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           DATABASE_URL: "postgresql+asyncpg://postgres:postgres@db:5432/quittung_test_db"
           REDIS_URL: "redis://redis:6379/0"

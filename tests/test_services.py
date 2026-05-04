@@ -11,7 +11,7 @@ from app.models.receipt import Receipt
 def mock_extraction():
     """Returns a fake AI extraction object."""
     return ReceiptExtractionSchema(
-        merchant_name="Test Store",
+        merchant_name="Unique Service Store",
         total_amount=50.0,
         currency="EUR",
         date=datetime(2026, 1, 1),
@@ -31,7 +31,7 @@ async def test_save_extracted_receipt_success(db_session, mock_extraction):
     )
 
     assert receipt.id is not None
-    assert receipt.merchant_name == "Test Store"
+    assert receipt.merchant_name == "Unique Service Store"
     assert len(receipt.items) == 2
     assert receipt.items[0].name == "Item 1"
 
@@ -66,11 +66,17 @@ async def test_generate_expenses_report_creation(db_session):
     # 1. Seed the test database
     new_receipt = Receipt(
         telegram_id=12345,
-        merchant_name="Test Shop",
+        merchant_name="Export Test Shop",
         total_amount=50.0,
-        currency="EUR"
+        currency="EUR",
+        date=datetime(2026, 1, 1)
     )
     db_session.add(new_receipt)
+    await db_session.flush()
+
+    from app.models.receipt import LineItem
+    item = LineItem(receipt_id=new_receipt.id, name="Test Item", price=50.0, category="Other")
+    db_session.add(item)
     await db_session.commit()
 
     # 2. Run service
