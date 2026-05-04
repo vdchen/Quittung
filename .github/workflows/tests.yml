@@ -32,6 +32,7 @@ jobs:
           # Optional secrets
           echo "GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}" >> .env.test
           echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" >> .env.test
+          echo "API_KEY=test-api-key-789" >> .env.test
 
       - name: Run tests in Docker
         env:

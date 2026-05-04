@@ -12,6 +12,7 @@
 - **Telegram Webhook** — Receives photos and PDFs via a signed webhook; duplicate receipts are detected and skipped.
 - **Excel Export** — Generates multi-sheet reports with monthly breakdowns and category analytics.
 - **Secure Webhook** — Every Telegram update is verified with a `X-Telegram-Bot-Api-Secret-Token` header.
+- **API Security** — REST endpoints are protected by a mandatory `X-API-Key` header.
 
 ---
 
@@ -35,10 +36,12 @@
 ```
 quittung/
 ├── app/
-│   ├── api/endpoints/v1/
-│   │   ├── receipts.py      # POST /receipts/upload, GET status
-│   │   ├── exports.py       # POST /exports/, GET status
-│   │   └── telegram.py      # POST /telegram/webhook
+│   ├── api/
+│   │   ├── endpoints/v1/
+│   │   │   ├── receipts.py      # POST /receipts/upload, GET status
+│   │   │   ├── exports.py       # POST /exports/, GET status
+│   │   │   └── telegram.py      # POST /telegram/webhook
+│   │   └── deps.py              # API Dependencies (Auth, etc.)
 │   ├── core/
 │   │   ├── config.py        # Pydantic Settings (reads .env / .env.test)
 │   │   └── celery_app.py    # Celery + Redis configuration
@@ -97,6 +100,7 @@ SECRET_KEY=<random-256-bit-string>
 GOOGLE_API_KEY=<your-google-api-key>
 TELEGRAM_BOT_TOKEN=<your-bot-token>
 TELEGRAM_WEBHOOK_SECRET=<random-secret-for-webhook-signing>
+API_KEY=<your-api-key-for-rest-endpoints>
 ```
 
 ### 2 — Start services
@@ -121,6 +125,9 @@ The script registers the URL and passes `TELEGRAM_WEBHOOK_SECRET` so Telegram si
 ---
 
 ## API Endpoints
+
+> [!IMPORTANT]
+> All endpoints (except `/telegram/webhook` and system checks) require a valid API Key passed via the `X-API-Key` header.
 
 ### Receipt Processing
 
@@ -187,6 +194,7 @@ docker compose exec api pytest -m "not integration"
 | `GOOGLE_API_KEY`              |    ✅    | Gemini API key                                    |
 | `TELEGRAM_BOT_TOKEN`          |    ✅    | Token from @BotFather                             |
 | `TELEGRAM_WEBHOOK_SECRET`     |    ✅    | Strongly recommended — signs webhook updates      |
+| `API_KEY`                     |    ✅    | Secret key for REST API authentication            |
 | `DEBUG`                       |    ❌    | Enables SQLAlchemy query logging (default: False) |
 | `ENVIRONMENT`                 |    ❌    | `development` / `testing` / `production`          |
 
@@ -194,9 +202,10 @@ docker compose exec api pytest -m "not integration"
 
 ## Architecture Notes
 
-### Why `chat_id` instead of JWT?
+### Identity & Security
 
-For a Telegram-first application, `chat_id` is the natural identity anchor. Telegram guarantees the `chat_id` is authentic — it comes from Telegram's servers via a signed webhook, not from the end user directly. JWT tokens are only needed if you add a web frontend or third-party API consumers.
+- **Identity via `chat_id`**: For a Telegram-first application, `chat_id` is the natural identity anchor. When using the Telegram Bot, this ID is guaranteed by Telegram's signed webhooks.
+- **Access via `API_KEY`**: While `chat_id` identifies the *owner* of a receipt, the REST API endpoints themselves are protected by a mandatory `API_KEY`. This ensures that even if an attacker knows a `chat_id`, they cannot upload receipts or trigger exports without the server's secret key.
 
 ### Celery + async
 

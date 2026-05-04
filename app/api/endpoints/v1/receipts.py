@@ -1,14 +1,16 @@
 import os
 import uuid
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 from celery.result import AsyncResult
 from app.tasks.worker import process_receipt_task
 from app.core.celery_app import celery_app
+from app.api.deps import get_api_key
 
 
 router = APIRouter(
     prefix="/receipts",
-    tags=["Receipts"]
+    tags=["Receipts"],
+    dependencies=[Depends(get_api_key)]
 )
 
 # Ensure upload directory exists

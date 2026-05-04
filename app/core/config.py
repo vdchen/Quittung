@@ -26,6 +26,7 @@ class Settings(BaseSettings):
 
     # Security
     SECRET_KEY: str
+    API_KEY: str | None = None
     CORS_ORIGINS: Union[List[str], str] = ["*"]
 
     @field_validator("CORS_ORIGINS", mode="before")

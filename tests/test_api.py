@@ -1,6 +1,9 @@
 import pytest
 from unittest.mock import patch
 from tests.utils import get_url
+from app.core.config import settings
+
+AUTH_HEADERS = {"X-API-Key": settings.API_KEY}
 
 
 @pytest.mark.asyncio
@@ -11,7 +14,12 @@ async def test_upload_receipt_endpoint(client):
         data = {"chat_id": "12345"}
         
         # CORRECT: Call the function with the relative path
-        response = await client.post(get_url("/receipts/upload"), files=files, data=data)
+        response = await client.post(
+            get_url("/receipts/upload"), 
+            files=files, 
+            data=data,
+            headers=AUTH_HEADERS
+        )
         
         assert response.status_code == 202
         assert response.json()["task_id"] == "fake-task-id"
@@ -25,7 +33,10 @@ async def test_get_export_status_not_found(client):
         mock_result.return_value.info = None 
         
         # CORRECT: get_url handles the versioning and slashes
-        response = await client.get(get_url(f"/exports/status/{fake_task_id}"))
+        response = await client.get(
+            get_url(f"/exports/status/{fake_task_id}"),
+            headers=AUTH_HEADERS
+        )
         assert response.status_code == 404
 
 @pytest.mark.asyncio
@@ -37,7 +48,10 @@ async def test_get_export_status_success(client, tmp_path):
         mock_res.return_value.state = "SUCCESS"
         mock_res.return_value.result = {"file_path": str(fake_file)}
         
-        response = await client.get(get_url("/exports/status/some-id"))
+        response = await client.get(
+            get_url("/exports/status/some-id"),
+            headers=AUTH_HEADERS
+        )
         assert response.status_code == 200
         assert response.headers["content-type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
@@ -47,14 +61,21 @@ async def test_get_export_status_failure(client):
         mock_res.return_value.state = "FAILURE"
         mock_res.return_value.info = "Database connection error"
         
-        response = await client.get(get_url("/exports/status/fail-id"))
+        response = await client.get(
+            get_url("/exports/status/fail-id"),
+            headers=AUTH_HEADERS
+        )
         assert response.status_code == 200
         assert response.json()["status"] == "FAILED"
 
 @pytest.mark.asyncio
 async def test_upload_receipt_invalid_type(client):
     files = {"file": ("test.txt", b"hello world", "text/plain")}
-    response = await client.post(get_url("/receipts/upload"), files=files)
+    response = await client.post(
+        get_url("/receipts/upload"), 
+        files=files,
+        headers=AUTH_HEADERS
+    )
     assert response.status_code == 400
     assert response.json()["detail"] == "Invalid file type"        
 
@@ -64,7 +85,10 @@ async def test_get_receipt_status_success(client):
         mock_res.return_value.status = "SUCCESS"
         mock_res.return_value.result = {"receipt_id": 1, "merchant": "REWE"}
         
-        response = await client.get(get_url("/receipts/upload/status/task-123"))
+        response = await client.get(
+            get_url("/receipts/upload/status/task-123"),
+            headers=AUTH_HEADERS
+        )
         assert response.status_code == 200
         assert response.json()["result"]["merchant"] == "REWE"
 
@@ -74,5 +98,16 @@ async def test_get_receipt_status_failure(client):
         mock_res.return_value.status = "FAILURE"
         mock_res.return_value.info = "OCR Engine Timeout"
         
-        response = await client.get(get_url("/receipts/upload/status/task-fail"))
+        response = await client.get(
+            get_url("/receipts/upload/status/task-fail"),
+            headers=AUTH_HEADERS
+        )
         assert response.json().get("error") == "OCR Engine Timeout"
+
+
+@pytest.mark.asyncio
+async def test_unauthorized_access(client):
+    """Verify that requests without a valid API Key are rejected."""
+    response = await client.get(get_url("/receipts/upload/status/any-task"))
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Could not validate API Key"
