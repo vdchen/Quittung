@@ -1,13 +1,13 @@
-import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import field_validator
 from typing import List, Union
 
-# Read ENVIRONMENT before the Settings class is built.
-# When running tests, pytest-dotenv loads .env.test into os.environ first,
-# so ENVIRONMENT will be "testing" here and the correct file is selected.
-APP_ENV = os.getenv("ENVIRONMENT", "development")
-TARGET_ENV_FILE = ".env.test" if APP_ENV == "testing" else ".env"
+# Bootstrap Settings class to detect environment without os.getenv
+class EnvBootstrap(BaseSettings):
+    ENVIRONMENT: str = "development"
+
+_env = EnvBootstrap()
+TARGET_ENV_FILE = ".env.test" if _env.ENVIRONMENT == "testing" else ".env"
 
 
 class Settings(BaseSettings):
