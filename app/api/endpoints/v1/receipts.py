@@ -5,6 +5,7 @@ from celery.result import AsyncResult
 from app.tasks.worker import process_receipt_task
 from app.core.celery_app import celery_app
 from app.api.deps import get_api_key
+from fastapi_limiter.depends import RateLimiter
 
 
 router = APIRouter(
@@ -17,7 +18,7 @@ router = APIRouter(
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-@router.post("/upload", status_code=202)
+@router.post("/upload", status_code=202, dependencies=[Depends(RateLimiter(times=20, seconds=60))])
 async def upload_receipt(file: UploadFile = File(...),
                          chat_id: int | None = Form(None) # Accept chat_id from the bot
                          ):

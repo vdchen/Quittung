@@ -39,6 +39,7 @@ watchdog>=4.0
 aiocache==0.12.3
 
 # Auth and Security
+fastapi-limiter==0.1.6
 pyjwt==2.11.0
 bcrypt==5.0.0
 pwdlib[argon2]>=0.2.1

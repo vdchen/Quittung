@@ -7,6 +7,7 @@ from celery.result import AsyncResult
 from app.core.celery_app import celery_app
 from app.tasks.worker import generate_export_task
 from app.api.deps import get_api_key
+from fastapi_limiter.depends import RateLimiter
 
 router = APIRouter(
     prefix="/exports",
@@ -14,7 +15,8 @@ router = APIRouter(
     dependencies=[Depends(get_api_key)]
 )
 
-@router.post("/", status_code=202)
+# Rate limiting : 20 requests per minute per user
+@router.post("/", status_code=202, dependencies=[Depends(RateLimiter(times=20, seconds=60))])
 async def trigger_export(chat_id: Optional[int] = None):
     """
     Initiates an Excel export task.

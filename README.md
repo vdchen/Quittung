@@ -13,6 +13,8 @@
 - **Excel Export** — Generates multi-sheet reports with monthly breakdowns and category analytics.
 - **Secure Webhook** — Every Telegram update is verified with a `X-Telegram-Bot-Api-Secret-Token` header.
 - **API Security** — REST endpoints are protected by a mandatory `X-API-Key` header.
+- **Rate Limiting** — Protects the API and AI infrastructure from abuse using **FastAPI-Limiter + Redis**.
+- **Automated Cleanup** — Periodic background tasks (Celery Beat) automatically purge processed files older than 24h.
 
 ---
 
@@ -127,7 +129,7 @@ The script registers the URL and passes `TELEGRAM_WEBHOOK_SECRET` so Telegram si
 ## API Endpoints
 
 > [!IMPORTANT]
-> All endpoints (except `/telegram/webhook` and system checks) require a valid API Key passed via the `X-API-Key` header.
+> All endpoints (except `/telegram/webhook` and system checks) require a valid API Key passed via the `X-API-Key` header and are subject to **Rate Limiting** (20 requests per minute).
 
 ### Receipt Processing
 
@@ -195,6 +197,7 @@ docker compose exec api pytest -m "not integration"
 | `TELEGRAM_BOT_TOKEN`          |    ✅    | Token from @BotFather                             |
 | `TELEGRAM_WEBHOOK_SECRET`     |    ✅    | Strongly recommended — signs webhook updates      |
 | `API_KEY`                     |    ✅    | Secret key for REST API authentication            |
+| `UPLOAD_CLEANUP_HOURS`        |    ❌    | How long to keep files in `uploads/` (default: 24)|
 | `DEBUG`                       |    ❌    | Enables SQLAlchemy query logging (default: False) |
 | `ENVIRONMENT`                 |    ❌    | `development` / `testing` / `production`          |
 
