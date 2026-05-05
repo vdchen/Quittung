@@ -41,41 +41,51 @@ quittung/
 ├── app/
 │   ├── api/
 │   │   ├── endpoints/v1/
+│   │   │   ├── api.py           # Router aggregator
 │   │   │   ├── receipts.py      # POST /receipts/upload, GET status
 │   │   │   ├── exports.py       # POST /exports/, GET status
 │   │   │   └── telegram.py      # POST /telegram/webhook
-│   │   └── deps.py              # API Dependencies (Auth, etc.)
+│   │   └── deps.py              # API dependencies (API Key auth)
 │   ├── core/
-│   │   ├── config.py        # Pydantic Settings (reads .env / .env.test)
-│   │   └── celery_app.py    # Celery + Redis configuration
+│   │   ├── config.py            # Pydantic Settings (reads .env / .env.test)
+│   │   ├── celery_app.py        # Celery + Redis configuration
+│   │   └── logging.py           # Centralised structlog setup (JSON / console)
 │   ├── db/
-│   │   ├── base.py          # SQLAlchemy DeclarativeBase
-│   │   └── session.py       # Async engine, session factory, get_db dependency
-│   ├── models/receipt.py    # Receipt + LineItem ORM models
-│   ├── schemas/receipt.py   # Pydantic extraction schemas
+│   │   ├── base.py              # SQLAlchemy DeclarativeBase
+│   │   ├── session.py           # Async engine, session factory, get_db dependency
+│   │   └── utils.py             # Auto-create database utility
+│   ├── models/receipt.py        # Receipt + LineItem ORM models
+│   ├── schemas/receipt.py       # Pydantic extraction schemas
 │   ├── services/
-│   │   ├── ai_service.py    # Gemini API call (non-blocking executor)
-│   │   ├── receipt_service.py  # DB persistence + duplicate detection
-│   │   └── export_service.py   # Excel generation
-│   ├── tasks/worker.py      # Celery tasks (process_receipt_task, generate_export_task)
-│   └── main.py              # FastAPI app factory
+│   │   ├── ai_service.py        # Gemini API call (non-blocking executor)
+│   │   ├── receipt_service.py   # DB persistence + duplicate detection
+│   │   ├── export_service.py    # Excel generation (Pandas + OpenPyXL)
+│   │   └── notifications.py     # Telegram message formatters
+│   ├── tasks/worker.py          # Celery tasks (process_receipt_task, generate_export_task, cleanup)
+│   └── main.py                  # FastAPI app factory + /health endpoint
 ├── scripts/
-│   └── set_webhook.py       # One-shot script to register the webhook with Telegram
-├── migrations/              # Alembic revisions
+│   └── set_webhook.py           # One-shot script to register the webhook with Telegram
+├── migrations/                  # Alembic revisions
 ├── tests/
-│   ├── conftest.py          # pytest-asyncio fixtures (DB, HTTP client)
-│   ├── test_api.py          # API endpoint unit tests
-│   ├── test_services.py     # DB service unit tests
-│   ├── test_worker.py       # Worker task unit tests (shallow mocks)
-│   ├── test_integration_ai.py # Deep integration tests (mocking Gemini SDK)
-│   ├── test_negative.py     # Edge cases (corrupted files, protected PDFs)
-│   ├── test_pipeline.py     # Integration test (real Gemini call)
-│   ├── test_cleanup.py      # File cleanup task tests
-│   └── test_race_conditions.py # Duplicate detection race condition tests
-├── docker-compose.yml       # Production services
-├── docker-compose.override.yml  # Dev overrides (hot-reload, port bindings)
+│   ├── conftest.py              # pytest-asyncio fixtures (DB, HTTP client)
+│   ├── utils.py                 # Test helpers (get_url)
+│   ├── test_api.py              # API endpoint tests (upload, export, auth, size limit)
+│   ├── test_services.py         # DB service unit tests
+│   ├── test_worker.py           # Worker task unit tests
+│   ├── test_telegram.py         # Telegram webhook + handler tests
+│   ├── test_integration_ai.py   # Integration tests (mocking Gemini SDK)
+│   ├── test_negative.py         # Edge cases (encrypted PDFs, corrupted files)
+│   ├── test_pipeline.py         # Live integration test (real Gemini call, marked integration)
+│   ├── test_cleanup.py          # File cleanup task tests
+│   └── test_race_conditions.py  # Duplicate detection race condition tests
+├── .github/workflows/tests.yml  # CI: ruff lint + pytest (coverage ≥ 70%)
+├── .pre-commit-config.yaml      # Pre-commit hooks: gitleaks, ruff, standard checks
+├── docker-compose.yml           # Production services
+├── docker-compose.override.yml  # Dev overrides — gitignored, create locally (see README)
 ├── Dockerfile
+├── alembic.ini
 ├── pytest.ini
+├── requirements.txt
 └── .env.example
 ```
 
@@ -174,20 +184,20 @@ chat_id   = 12345678   (optional — enables Telegram notifications)
 
 ## Running Tests
 
-Tests use a dedicated PostgreSQL database (`quittung_test_db`) and are best executed inside the Docker environment to ensure network isolation.
+Tests use a dedicated PostgreSQL database (`quittung_test_db`). The test environment is loaded from `.env.test` automatically via **pytest-dotenv** — no manual env switching needed.
 
 ```bash
-# Execute all tests inside the api container
-docker-compose exec api sh -c "ENVIRONMENT=testing pytest --cov=app tests/"
+# Inside the api container
+docker compose exec api pytest
 
-# With a detailed coverage report for specific lines
-docker-compose exec api sh -c "ENVIRONMENT=testing pytest --cov=app --cov-report=term-missing tests/"
+# With coverage
+docker compose exec api pytest --cov=app --cov-report=term-missing
 
-# Unit tests only (skip real Gemini integration)
-docker-compose exec api sh -c "ENVIRONMENT=testing pytest -m 'not integration'"
+# Unit tests only (skip Gemini integration)
+docker compose exec api pytest -m "not integration"
 ```
 
-> **Note:** `test_pipeline.py` makes real calls to the Gemini API. These are marked as `integration` tests.
+> **Note:** `test_pipeline.py` makes real calls to the Gemini API and require a valid `GOOGLE_API_KEY`. Mark them with `-m integration` and skip in CI if needed.
 
 ---
 
@@ -203,6 +213,8 @@ docker-compose exec api sh -c "ENVIRONMENT=testing pytest -m 'not integration'"
 | `TELEGRAM_WEBHOOK_SECRET`     |    ✅    | Strongly recommended — signs webhook updates      |
 | `API_KEY`                     |    ✅    | Secret key for REST API authentication            |
 | `UPLOAD_CLEANUP_HOURS`        |    ❌    | How long to keep files in `uploads/` (default: 24)|
+| `MAX_UPLOAD_SIZE_MB`          |    ❌    | Max allowed file upload size in MB (default: 10)  |
+| `CORS_ORIGINS`                |    ❌    | Allowed CORS origins list (default: ["*"])        |
 | `DEBUG`                       |    ❌    | Enables SQLAlchemy query logging (default: False) |
 | `ENVIRONMENT`                 |    ❌    | `development` / `testing` / `production`          |
 

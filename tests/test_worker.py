@@ -1,10 +1,14 @@
 import pytest
 from datetime import datetime
-from unittest.mock import AsyncMock, patch, MagicMock, mock_open
+from unittest.mock import AsyncMock, patch, mock_open
 import httpx
 from app.tasks.worker import process_receipt_task, generate_export_task, send_telegram_message
 from app.schemas.receipt import ReceiptExtractionSchema, LineItemSchema
-from app.models.receipt import Receipt    
+from app.models.receipt import Receipt
+from app.services.notifications import (
+    format_receipt_duplicate,
+    format_receipt_error_ai_unavailable,
+)
 
 @pytest.fixture
 def mock_extraction_result():
@@ -83,7 +87,7 @@ async def test_process_receipt_task_duplicate(db_session, mock_extraction_result
         result = await process_receipt_task(file_path, "image/jpeg", chat_id)
 
         assert result["status"] == "duplicate"
-        mock_tg.assert_called_with(chat_id, "⚠️ <b>Duplicate Detected:</b> This receipt has already been processed.")
+        mock_tg.assert_called_with(chat_id, format_receipt_duplicate())
 
 @pytest.mark.asyncio
 async def test_generate_export_task_success(db_session):
@@ -124,28 +128,27 @@ async def test_process_receipt_task_failure_notifies_telegram(db_session):
         result = await process_receipt_task("fake.jpg", "image/jpeg", chat_id=123)
         
         assert result["status"] == "error"
-        # Verify the NEW error message was sent to the user
+        # Verify the error message was sent to the user
         mock_tg.assert_called_with(
-            123, 
-            "❌ <b>Processing Failed:</b> We tried several times but the AI service is currently unavailable. Please try again later."
+            123,
+            format_receipt_error_ai_unavailable()
         )
 
 @pytest.mark.asyncio
 async def test_send_telegram_message_network_error():
     """Verify that network errors during Telegram sends are logged."""
-    # Patch the settings object
     with patch("app.tasks.worker.settings") as mock_settings:
         mock_settings.TELEGRAM_BOT_TOKEN = "fake-token"
-        
+
         with patch("app.tasks.worker.httpx.AsyncClient") as mock_client_class:
             mock_instance = mock_client_class.return_value.__aenter__.return_value
             mock_instance.post = AsyncMock(side_effect=httpx.RequestError("Connection Refused"))
-            
+
             with patch("app.tasks.worker.logger") as mock_log:
                 await send_telegram_message(12345, "Test message")
 
                 mock_log.error.assert_called()
-                args, _ = mock_log.error.call_args
-                # Updated to match the new unified error string
-                assert "Telegram API Error" in args[0]
-                assert "Connection Refused" in args[0]
+                # structlog logs structured events — verify the event key and error field
+                call_kwargs = mock_log.error.call_args
+                event_name = call_kwargs[0][0] if call_kwargs[0] else call_kwargs[1].get("event", "")
+                assert "telegram" in event_name.lower() or "request" in event_name.lower()

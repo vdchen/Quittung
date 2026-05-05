@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import field_validator
 from typing import List, Union
+import os
 
 # Bootstrap Settings class to detect environment without os.getenv
 class EnvBootstrap(BaseSettings):
@@ -42,10 +43,19 @@ class Settings(BaseSettings):
 
     # Webhook security: set this to a random secret and pass it when registering
     # the webhook with Telegram via set_webhook(secret_token=...).
-    TELEGRAM_WEBHOOK_SECRET: str | None = None
+    TELEGRAM_WEBHOOK_SECRET: str
 
     # Storage
     UPLOAD_CLEANUP_HOURS: int = 24
+    UPLOAD_DIR: str = "uploads"
+    MAX_UPLOAD_SIZE_MB: int = 10
+
+    @field_validator("UPLOAD_DIR")
+    @classmethod
+    def validate_upload_dir(cls, v: str) -> str:
+        if not os.path.exists(v):
+            os.makedirs(v, exist_ok=True)
+        return v
     
     # Supported file formats for Gemini
     SUPPORTED_MIME_TYPES: List[str] = [

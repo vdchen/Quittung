@@ -1,8 +1,7 @@
 import pytest
 from unittest.mock import MagicMock, patch, mock_open
 from app.tasks.worker import process_receipt_task
-from app.schemas.receipt import ReceiptExtractionSchema
-from pydantic import ValidationError
+from app.services.notifications import format_receipt_error_ai_validation
 
 @pytest.mark.asyncio
 async def test_worker_with_malformed_ai_json(db_session):
@@ -44,8 +43,8 @@ async def test_worker_with_malformed_ai_json(db_session):
         assert result["status"] == "error"
         # The worker should have caught the ValidationError and eventually notified the user
         mock_tg.assert_called_with(
-            chat_id, 
-            "❌ <b>Processing Failed:</b> The AI service returned an invalid response. We tried to recover but failed. Please try again with a clearer image."
+            chat_id,
+            format_receipt_error_ai_validation()
         )
 
 @pytest.mark.asyncio

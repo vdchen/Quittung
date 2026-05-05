@@ -1,6 +1,5 @@
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock, mock_open
-from app.core.config import settings
 from tests.utils import get_url
 
 @pytest.mark.asyncio
@@ -8,15 +7,32 @@ async def test_telegram_webhook_invalid_secret(client):
     """Verify that the webhook rejects requests with the wrong secret token."""
     with patch("app.api.endpoints.v1.telegram.settings") as mock_settings:
         mock_settings.TELEGRAM_WEBHOOK_SECRET = "super-secret"
-        
+
         response = await client.post(
             get_url("/telegram/webhook"),
             json={"update_id": 1},
             headers={"X-Telegram-Bot-Api-Secret-Token": "wrong-secret"}
         )
-        
+
         assert response.status_code == 403
         assert response.json()["detail"] == "Invalid webhook secret."
+
+
+@pytest.mark.asyncio
+async def test_telegram_webhook_missing_secret_returns_500(client):
+    """Verify that a missing TELEGRAM_WEBHOOK_SECRET causes a 500 (misconfiguration),
+    not silent acceptance of unauthenticated traffic."""
+    with patch("app.api.endpoints.v1.telegram.settings") as mock_settings:
+        mock_settings.TELEGRAM_WEBHOOK_SECRET = None
+
+        response = await client.post(
+            get_url("/telegram/webhook"),
+            json={"update_id": 1},
+            headers={"X-Telegram-Bot-Api-Secret-Token": "any-value"}
+        )
+
+        assert response.status_code == 500
+        assert "misconfiguration" in response.json()["detail"].lower()
 
 @pytest.mark.asyncio
 async def test_telegram_webhook_success(client):

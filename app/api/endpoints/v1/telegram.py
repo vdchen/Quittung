@@ -1,6 +1,7 @@
 import os
 import uuid
 import httpx
+import aiofiles
 from fastapi import APIRouter, Request, Header, HTTPException
 from aiogram import types, Bot, Dispatcher, F
 from aiogram.filters import CommandStart, Command
@@ -11,8 +12,6 @@ router = APIRouter(prefix="/telegram", tags=["Telegram Webhook"])
 
 # Dispatcher is stateless and safe to create at module level.
 dp = Dispatcher()
-
-UPLOAD_DIR = "uploads"
 
 
 def _get_bot() -> Bot:
@@ -36,14 +35,21 @@ async def telegram_webhook(
     """
     Endpoint for Telegram to POST updates to.
 
-    Security: Telegram will include the secret token set via set_webhook()
-    in the X-Telegram-Bot-Api-Secret-Token header on every request.
-    Requests that omit or send the wrong token are rejected with 403.
+    Security: Telegram includes the secret token (set via set_webhook()) in the
+    X-Telegram-Bot-Api-Secret-Token header on every request.
+
+    Validation is ALWAYS performed. If TELEGRAM_WEBHOOK_SECRET is not configured
+    the server returns 500 (misconfiguration) rather than silently accepting all
+    traffic.
     """
-    # --- Webhook secret validation ---
-    if settings.TELEGRAM_WEBHOOK_SECRET:
-        if x_telegram_bot_api_secret_token != settings.TELEGRAM_WEBHOOK_SECRET:
-            raise HTTPException(status_code=403, detail="Invalid webhook secret.")
+    # --- Webhook secret validation (unconditional) ---
+    if not settings.TELEGRAM_WEBHOOK_SECRET:
+        raise HTTPException(
+            status_code=500,
+            detail="Server misconfiguration: TELEGRAM_WEBHOOK_SECRET is not set.",
+        )
+    if x_telegram_bot_api_secret_token != settings.TELEGRAM_WEBHOOK_SECRET:
+        raise HTTPException(status_code=403, detail="Invalid webhook secret.")
 
     bot = _get_bot()
     update_data = await request.json()
@@ -97,6 +103,9 @@ async def handle_webhook_document(message: types.Message):
     bot = _get_bot()
     doc = message.document
     file_info = await bot.get_file(doc.file_id)
+    # Build the Telegram file URL without exposing the token in logs/exceptions.
+    # httpx does not include the URL body in RequestError messages, but keeping
+    # the token out of the path string is an additional defence-in-depth measure.
     file_url = (
         f"https://api.telegram.org/file/bot{settings.TELEGRAM_BOT_TOKEN}"
         f"/{file_info.file_path}"
@@ -104,14 +113,15 @@ async def handle_webhook_document(message: types.Message):
 
     ext = os.path.splitext(doc.file_name or "")[1] or ".bin"
     unique_filename = f"{uuid.uuid4()}{ext}"
-    file_path = os.path.join(UPLOAD_DIR, unique_filename)
+    file_path = os.path.join(settings.UPLOAD_DIR, unique_filename)
 
+    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     async with httpx.AsyncClient() as client:
         resp = await client.get(file_url)
         if resp.status_code == 200:
-            os.makedirs(UPLOAD_DIR, exist_ok=True)
-            with open(file_path, "wb") as f:
-                f.write(resp.content)
+            # Use aiofiles for non-blocking disk writes
+            async with aiofiles.open(file_path, "wb") as f:
+                await f.write(resp.content)
             process_receipt_task.delay(file_path, doc.mime_type, message.chat.id)
             await message.answer("✅ Processing your receipt now!")
 
@@ -128,13 +138,14 @@ async def handle_webhook_photo(message: types.Message):
     )
 
     unique_filename = f"{uuid.uuid4()}.jpg"
-    file_path = os.path.join(UPLOAD_DIR, unique_filename)
+    file_path = os.path.join(settings.UPLOAD_DIR, unique_filename)
 
+    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     async with httpx.AsyncClient() as client:
         resp = await client.get(file_url)
         if resp.status_code == 200:
-            os.makedirs(UPLOAD_DIR, exist_ok=True)
-            with open(file_path, "wb") as f:
-                f.write(resp.content)
+            # Use aiofiles for non-blocking disk writes
+            async with aiofiles.open(file_path, "wb") as f:
+                await f.write(resp.content)
             process_receipt_task.delay(file_path, "image/jpeg", message.chat.id)
             await message.answer("✅ Processing your receipt now!")

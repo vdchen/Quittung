@@ -1,5 +1,5 @@
-import pytest
 import pytest_asyncio
+import logging
 from typing import AsyncGenerator
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
@@ -8,6 +8,7 @@ from sqlalchemy.pool import NullPool
 from app.core.config import settings
 from app.main import app
 from app.db.session import get_db
+from app.db.utils import create_db_if_not_exists
 from app.models.receipt import Base
 from fastapi_limiter.depends import RateLimiter
 
@@ -19,22 +20,18 @@ TestSessionLocal = async_sessionmaker(
     test_engine, expire_on_commit=False, class_=AsyncSession
 )
 
-
-from app.db.utils import create_db_if_not_exists
-
-import logging
-
 logger = logging.getLogger(__name__)
+
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def setup_db():
     """Create all tables once before the test session; drop them after."""
     # Ensure the test database exists
     await create_db_if_not_exists(TEST_DATABASE_URL)
-    
+
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    
+
     # Initialize FastAPILimiter for tests
     import redis.asyncio as redis
     from fastapi_limiter import FastAPILimiter
@@ -43,7 +40,7 @@ async def setup_db():
 
     yield
     await r.close()
-    
+
     # SAFETY SHIELD: Only drop tables if we are 100% sure we are in a test database
     if "test" in settings.DATABASE_URL.lower():
         async with test_engine.begin() as conn:
@@ -57,7 +54,7 @@ async def clean_db():
     """Wipe all tables before each test to ensure isolation."""
     # Check both URL and ENVIRONMENT for safety
     is_test_db = "test" in settings.DATABASE_URL.lower() or settings.ENVIRONMENT == "testing"
-    
+
     if is_test_db:
         async with test_engine.begin() as conn:
             await conn.run_sync(Base.metadata.drop_all)
@@ -70,7 +67,7 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     """Provide a transactional test session."""
     async with TestSessionLocal() as session:
         yield session
-        # No rollback needed if we wipe the DB before each test, 
+        # No rollback needed if we wipe the DB before each test,
         # but it's good practice to close cleanly.
         await session.close()
 

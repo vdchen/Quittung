@@ -1,7 +1,8 @@
 import pytest
-from unittest.mock import patch, AsyncMock, mock_open, MagicMock
+from unittest.mock import patch, mock_open, MagicMock
 from app.tasks.worker import process_receipt_task
 from app.services.ai_service import process_receipt_image
+from app.services.notifications import format_receipt_error_protected
 from pydantic import ValidationError
 
 @pytest.mark.asyncio
@@ -28,7 +29,7 @@ async def test_process_receipt_encrypted_pdf(db_session):
         # Verify user is notified with the SPECIFIC message
         mock_tg.assert_called_with(
             chat_id,
-            "❌ <b>Processing Failed:</b> This PDF is password protected and cannot be processed. Please upload an unencrypted version."
+            format_receipt_error_protected()
         )
         
         # Verify it did NOT retry (raise current_task.retry)
@@ -61,8 +62,6 @@ async def test_ai_service_validation_error(db_session):
     """
     Test when AI returns malformed JSON that fails Pydantic validation.
     """
-    file_path = "tests/assets/receipt.jpg"
-    
     with patch("app.services.ai_service._get_genai_client") as mock_client_factory:
         mock_client = mock_client_factory.return_value
         # Mock Gemini returning something that isn't valid for our schema
@@ -84,7 +83,7 @@ async def test_process_receipt_db_connection_error():
     
     with patch("builtins.open", mock_open(read_data=b"fake_bytes")), \
          patch("os.path.exists", return_value=True), \
-         patch("app.tasks.worker.process_receipt_image") as mock_ai, \
+         patch("app.tasks.worker.process_receipt_image"), \
          patch("app.tasks.worker.async_session_maker", side_effect=Exception("DB Connection Refused")), \
          patch("app.tasks.worker.send_telegram_message") as mock_tg, \
          patch("app.tasks.worker.current_task") as mock_task:
@@ -108,7 +107,7 @@ async def test_process_receipt_file_not_found(db_session):
     chat_id = 123
     
     with patch("os.path.exists", return_value=False), \
-         patch("app.tasks.worker.send_telegram_message") as mock_tg:
+         patch("app.tasks.worker.send_telegram_message"):
         
         # FileNotFoundError will be caught by the general exception handler
         result = await process_receipt_task(file_path, "image/jpeg", chat_id)

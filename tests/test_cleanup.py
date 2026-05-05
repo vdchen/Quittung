@@ -1,6 +1,6 @@
 import os
 import time
-import pytest
+from unittest.mock import patch
 from app.tasks.worker import cleanup_uploads_task
 from app.core.config import settings
 
@@ -27,7 +27,6 @@ def test_cleanup_uploads_task(tmp_path):
     os.utime(str(old_file), (past_time, past_time))
     
     # Patch the directory in the task
-    from unittest.mock import patch
     original_getmtime = os.path.getmtime
     
     # We need to make the task look at our tmp_path instead of the real 'uploads'

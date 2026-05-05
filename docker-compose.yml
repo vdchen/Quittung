@@ -55,7 +55,7 @@ services:
 
   api:
     build: .
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
     volumes:
       - uploads_data:/app/uploads 
     env_file:
@@ -73,10 +73,15 @@ services:
     restart: unless-stopped
     networks:
       - quittung_network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
 
   worker:
     build: .
-    command: celery -A app.core.celery_app worker --loglevel=info
+    command: celery -A app.core.celery_app worker --loglevel=info --concurrency=4
     volumes:
       - uploads_data:/app/uploads
     env_file:
@@ -94,6 +99,11 @@ services:
     restart: unless-stopped
     networks:
       - quittung_network
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
 
   beat:
     build: .
@@ -113,6 +123,12 @@ services:
     restart: unless-stopped
     networks:
       - quittung_network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+
 
 networks:
   quittung_network:

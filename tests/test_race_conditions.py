@@ -41,8 +41,8 @@ async def test_duplicate_check_race_condition():
                 return await original_is_duplicate(*args, **kwargs)
 
             with patch("app.services.receipt_service.is_duplicate", side_effect=mocked_is_duplicate):
-                # Run both concurrently
-                results = await asyncio.gather(
+                # Run both concurrently; we only care about the DB state afterwards
+                await asyncio.gather(
                     save_extracted_receipt(session1, extraction, telegram_id),
                     save_extracted_receipt(session2, extraction, telegram_id),
                     return_exceptions=True

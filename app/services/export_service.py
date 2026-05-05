@@ -1,10 +1,12 @@
 import uuid
 import pandas as pd
 import asyncio
+import os
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.receipt import Receipt
+from app.core.config import settings
 
 async def generate_expenses_report(
         db: AsyncSession, 
@@ -58,7 +60,7 @@ async def generate_expenses_report(
     global_summary_df = df.groupby("Category")["Price"].sum().reset_index()
     global_summary_df.columns = ["Category", "Total Spent"]
 
-    output_path = f"uploads/{file_name}"
+    output_path = os.path.join(settings.UPLOAD_DIR, file_name)
     
     def write_excel():
         with pd.ExcelWriter(output_path, engine='openpyxl') as writer:

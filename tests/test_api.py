@@ -111,3 +111,22 @@ async def test_unauthorized_access(client):
     response = await client.get(get_url("/receipts/upload/status/any-task"))
     assert response.status_code == 403
     assert response.json()["detail"] == "Could not validate API Key"
+
+
+@pytest.mark.asyncio
+async def test_upload_receipt_too_large(client):
+    """Verify that files exceeding MAX_UPLOAD_SIZE_MB are rejected with 413."""
+    from app.core.config import settings
+
+    # Create fake content that is 1 byte over the limit
+    oversized_bytes = b"X" * (settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024 + 1)
+    files = {"file": ("big.pdf", oversized_bytes, "application/pdf")}
+
+    response = await client.post(
+        get_url("/receipts/upload"),
+        files=files,
+        headers=AUTH_HEADERS,
+    )
+
+    assert response.status_code == 413
+    assert "too large" in response.json()["detail"].lower()
