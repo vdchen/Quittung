@@ -23,6 +23,11 @@ COPY requirements.txt .
 RUN pip install --upgrade pip && \
     pip install -r requirements.txt
 
+# Copy the entrypoint script
+COPY entrypoint.sh /entrypoint.sh
+# Make it executable
+RUN chmod +x /entrypoint.sh    
+
 # Copy application code
 COPY . .
 
@@ -35,31 +40,26 @@ RUN echo "import asyncio\n\
 import sys\n\
 from pathlib import Path\n\
 \n\
-# Add app to path\n\
 sys.path.insert(0, '/app')\n\
 \n\
-# Configure async loop\n\
 import uvloop\n\
 uvloop.install()\n\
 \n\
-# Enable top-level await\n\
 from IPython import get_ipython\n\
 ipython = get_ipython()\n\
 if ipython:\n\
     ipython.enable_gui = lambda gui: None\n\
 \n\
-# Import common modules\n\
-from app.config import settings\n\
-from app.db.session import get_async_session\n\
-from app.utils.redis_client import get_redis_client\n\
+from app.core.config import settings\n\
+from app.db.session import get_db, async_session_maker\n\
 \n\
 print('='*60)\n\
-print('Auth API Service - Async Shell')\n\
+print('Quittung - Async Dev Shell')\n\
 print('='*60)\n\
 print('Available imports:')\n\
-print('  - settings: Configuration')\n\
-print('  - get_async_session: Database session')\n\
-print('  - get_redis_client: Redis client')\n\
+print('  - settings: Application configuration')\n\
+print('  - get_db: FastAPI DB dependency')\n\
+print('  - async_session_maker: SQLAlchemy session factory')\n\
 print('='*60)\n\
 " > /root/.ipython/profile_default/startup/00-async-setup.py
 
@@ -69,6 +69,13 @@ ENV IPYTHONDIR=/root/.ipython
 
 # Expose port
 EXPOSE 8000
+
+#LN/CRLF conversion
+RUN apt-get update && apt-get install -y dos2unix && \
+    dos2unix /app/pytest.ini /entrypoint.sh
+
+# Set the entrypoint
+ENTRYPOINT ["/entrypoint.sh"]
 
 # Run application
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

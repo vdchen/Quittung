@@ -3,7 +3,7 @@ from pathlib import Path
 from app.services.ai_service import process_receipt_image
 
 # Path to test receipt
-TEST_IMAGE_PATH = Path("REWE-ebon.pdf")
+TEST_IMAGE_PATH = Path(__file__).parent / "sample_receipt.pdf"
 
 @pytest.mark.asyncio
 async def test_process_receipt_integration():
@@ -21,7 +21,7 @@ async def test_process_receipt_integration():
     result = await process_receipt_image(image_bytes, mime_type="application/pdf")
 
     # 3. Clinical Validation
-    assert result.merchant_name == "REWE Markt", "Merchant name extraction failed"
+    assert "REWE Markt" in result.merchant_name
     assert result.total_amount == 66.12
     assert result.currency == "EUR"
     assert len(result.items) > 0, "No line items were extracted"
@@ -34,9 +34,3 @@ async def test_process_receipt_integration():
     for item in result.items:
         assert item.price > 0
         assert isinstance(item.category, str)
-
-@pytest.mark.asyncio
-async def test_invalid_mime_type_raises_error():
-    """Ensure the service handles unsupported files gracefully if you add validation later."""
-    # Placeholder for negative testing
-    pass

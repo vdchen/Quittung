@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional
+from datetime import datetime
 
 
 class LineItemSchema(BaseModel):
@@ -17,7 +18,9 @@ class ReceiptExtractionSchema(BaseModel):
         description="Total amount paid on the receipt.")
     currency: str = Field(
         description="3-letter currency code, e.g., EUR, USD, UAH. Default to EUR if unsure.")
-    date: Optional[str] = Field(
-        description="Date of purchase in YYYY-MM-DD format. Null if unreadable.")
+    date: Optional[datetime] = Field(
+        default=None, 
+        description="Date of purchase. Pydantic will parse YYYY-MM-DD into a datetime object."
+    )
     items: List[LineItemSchema] = Field(
         description="List of all purchased items.")
