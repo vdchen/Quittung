@@ -1,6 +1,7 @@
 import redis.asyncio as redis
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi_limiter import FastAPILimiter
 from app.api.endpoints.v1.api import api_router
 from app.core.config import settings
@@ -38,6 +39,16 @@ def get_application() -> FastAPI:
         # Hide docs in production
         docs_url=None if settings.ENVIRONMENT == "production" else "/docs",
         redoc_url=None if settings.ENVIRONMENT == "production" else "/redoc",
+    )
+
+    # CORS — must be registered before routers so it wraps all responses.
+    # Origins are configured via CORS_ORIGINS in .env; set explicitly in production.
+    _app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.CORS_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
 
     _app.include_router(api_router, prefix=settings.API_V1_PREFIX)

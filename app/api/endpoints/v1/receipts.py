@@ -32,34 +32,42 @@ async def upload_receipt(
     if file.content_type not in ["application/pdf", "image/jpeg", "image/png"]:
         raise HTTPException(status_code=400, detail="Invalid file type")
 
-    # 2. File size validation — read into memory with a hard cap to prevent OOM.
-    #    We read once and reuse the bytes so we don't stream twice.
-    file_bytes = await file.read()
-    if len(file_bytes) > _MAX_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail=f"File too large. Maximum allowed size is {settings.MAX_UPLOAD_SIZE_MB} MB.",
-        )
-
-    # 3. Generate a secure, unique filename to prevent overwrites
+    # 2. Generate a secure, unique filename to prevent overwrites
     CONTENT_TYPE_MAP = {
         "application/pdf": "pdf",
         "image/jpeg": "jpg",
-        "image/png": "png"
+        "image/png": "png",
     }
-
     file_extension = CONTENT_TYPE_MAP[file.content_type]
     unique_filename = f"{uuid.uuid4()}.{file_extension}"
     file_path = os.path.join(settings.UPLOAD_DIR, unique_filename)
 
-    # 4. Save file to disk asynchronously (non-blocking write)
+    # 3. Stream file to disk in 64 KB chunks with a hard size cap.
+    #    This prevents OOM under high concurrency — we never hold the full
+    #    payload in RAM. If the limit is exceeded the partial file is deleted
+    #    before the 413 response is returned.
+    _CHUNK = 65_536  # 64 KB
+    total_bytes = 0
     try:
         async with aiofiles.open(file_path, "wb") as buffer:
-            await buffer.write(file_bytes)
+            while chunk := await file.read(_CHUNK):
+                total_bytes += len(chunk)
+                if total_bytes > _MAX_BYTES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File too large. Maximum allowed size is {settings.MAX_UPLOAD_SIZE_MB} MB.",
+                    )
+                await buffer.write(chunk)
+    except HTTPException:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        raise
     except Exception as e:
+        if os.path.exists(file_path):
+            os.remove(file_path)
         raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
 
-    # 5. Trigger Celery Task — pass the PATH, not the bytes
+    # 4. Trigger Celery Task — pass the PATH, not the bytes
     task = process_receipt_task.delay(file_path, file.content_type, chat_id)
 
     return {

@@ -25,7 +25,7 @@
 | :--- | :--- |
 | **API** | FastAPI, Uvicorn, Pydantic v2 |
 | **AI** | Google Gemini 2.5 Flash (`google-genai`) |
-| **Bot** | Aiogram 3.x (webhook mode) |
+| **Bot** | Aiogram 3.x (types + dispatcher, webhook mode) |
 | **Task Queue** | Celery + Redis |
 | **Database** | PostgreSQL · asyncpg · SQLAlchemy 2.0 async |
 | **Migrations** | Alembic |
@@ -78,7 +78,7 @@ quittung/
 │   ├── test_pipeline.py         # Live integration test (real Gemini call, marked integration)
 │   ├── test_cleanup.py          # File cleanup task tests
 │   └── test_race_conditions.py  # Duplicate detection race condition tests
-├── .github/workflows/tests.yml  # CI: ruff lint + pytest (coverage ≥ 70%)
+├── .github/workflows/tests.yml  # CI: ruff lint + pytest (coverage ≥ 80%)
 ├── .pre-commit-config.yaml      # Pre-commit hooks: gitleaks, ruff, standard checks
 ├── docker-compose.yml           # Production services
 ├── docker-compose.override.yml  # Dev overrides — gitignored, create locally (see README)
@@ -197,7 +197,7 @@ docker compose exec api pytest --cov=app --cov-report=term-missing
 docker compose exec api pytest -m "not integration"
 ```
 
-> **Note:** `test_pipeline.py` makes real calls to the Gemini API and require a valid `GOOGLE_API_KEY`. Mark them with `-m integration` and skip in CI if needed.
+> **Note:** `test_pipeline.py` makes real calls to the Gemini API and requires a valid `GOOGLE_API_KEY`. It is marked `integration` and skipped in CI automatically.
 
 ---
 
@@ -207,10 +207,10 @@ docker compose exec api pytest -m "not integration"
 |-------------------------------|--------- |---------------------------------------------------|
 | `DATABASE_URL`                |    ✅    | asyncpg connection string                         |
 | `REDIS_URL`                   |    ✅    | Redis broker/backend URL                          |
-| `SECRET_KEY`                  |    ✅    | Application secret (JWT signing etc.)             |
+| `SECRET_KEY`                  |    ✅    | Application secret key (used for future signing)  |
 | `GOOGLE_API_KEY`              |    ✅    | Gemini API key                                    |
 | `TELEGRAM_BOT_TOKEN`          |    ✅    | Token from @BotFather                             |
-| `TELEGRAM_WEBHOOK_SECRET`     |    ✅    | Strongly recommended — signs webhook updates      |
+| `TELEGRAM_WEBHOOK_SECRET`     |    ✅    | Required — signs every Telegram webhook update    |
 | `API_KEY`                     |    ✅    | Secret key for REST API authentication            |
 | `UPLOAD_CLEANUP_HOURS`        |    ❌    | How long to keep files in `uploads/` (default: 24)|
 | `MAX_UPLOAD_SIZE_MB`          |    ❌    | Max allowed file upload size in MB (default: 10)  |

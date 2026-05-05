@@ -60,6 +60,10 @@ async def test_duplicate_check_race_condition():
                 result = await session3.execute(stmt)
                 receipts = result.scalars().all()
                 
-                # This assertion will currently FAIL, proving the bug exists.
-                # Once we fix the code, this test will PASS.
-                assert len(receipts) == 1, f"Race condition detected! Found {len(receipts)} receipts instead of 1."
+            # DB-level UniqueConstraint (uq_receipt_duplicate) ensures that even when
+            # two concurrent workers both pass the is_duplicate() check before either
+            # commits, the database rejects the second INSERT — guaranteeing exactly
+            # one receipt is stored regardless of timing.
+            assert len(receipts) == 1, (
+                f"Race condition not blocked! Expected 1 receipt, found {len(receipts)}."
+            )

@@ -65,7 +65,7 @@ jobs:
           # The database creation is handled automatically by app code
           # in migrations/env.py and tests/conftest.py.
           ENV_FILE=.env.test docker compose -p quittung run --rm api \
-            pytest --cov=app --cov-report=xml --cov-report=term-missing --cov-fail-under=70
+            pytest --cov=app --cov-report=xml --cov-report=term-missing --cov-fail-under=80
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
